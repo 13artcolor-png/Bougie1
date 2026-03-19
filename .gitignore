@@ -1,0 +1,38 @@
+# Environnement
+.env
+.env.*
+__pycache__/
+*.pyc
+*.pyo
+.port
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
+
+# Base de donnees
+backend/data/signatures.db
+
+# Fichiers de test
+backend/test_*.py
+
+# Captures d'ecran
+captures/
+
+# Claude settings
+.claude/
+
+# Build info
+frontend/tsconfig.tsbuildinfo

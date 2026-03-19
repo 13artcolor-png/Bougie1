@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+/* Police minimum 18px sur toute l'interface */
+html {
+  font-size: 18px;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #0a0a0f;
+  color: #e0e0e0;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scrollbar personnalisee */
+::-webkit-scrollbar {
+  width: 12px;
+}
+::-webkit-scrollbar-track {
+  background: #1a1a2e;
+}
+::-webkit-scrollbar-thumb {
+  background: #666;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #888;
+}

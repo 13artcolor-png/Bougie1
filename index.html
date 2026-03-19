@@ -1,0 +1,1812 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Archi Draw - Dessin d'arborescence</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1a2e; color: #e0e0e0; }
+
+/* ── Toolbar ── */
+#toolbar {
+  position: fixed; top: 0; left: 0; right: 0; height: 56px; z-index: 100;
+  background: #16213e; border-bottom: 1px solid #0f3460;
+  display: flex; align-items: center; padding: 0 12px; gap: 6px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+}
+#toolbar .sep { width: 1px; height: 32px; background: #0f3460; margin: 0 6px; }
+#toolbar button, #toolbar label {
+  background: #1a1a2e; border: 1px solid #0f3460; color: #e0e0e0;
+  padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 14px;
+  display: flex; align-items: center; gap: 5px; white-space: nowrap; height: 36px;
+}
+#toolbar button:hover, #toolbar label:hover { background: #0f3460; }
+#toolbar button.active { background: #e94560; border-color: #e94560; color: #fff; }
+#toolbar input[type="color"] { width: 30px; height: 30px; border: none; cursor: pointer; background: none; }
+#toolbar input[type="range"] { width: 70px; accent-color: #e94560; }
+#toolbar select { background: #1a1a2e; border: 1px solid #0f3460; color: #e0e0e0; padding: 4px 8px; border-radius: 6px; height: 36px; font-size: 14px; }
+
+/* ── Status bar ── */
+#statusbar {
+  position: fixed; bottom: 0; left: 0; right: 0; height: 28px; z-index: 100;
+  background: #16213e; border-top: 1px solid #0f3460;
+  display: flex; align-items: center; padding: 0 12px; font-size: 12px; color: #888;
+  justify-content: space-between;
+}
+
+/* ── Canvas ── */
+#canvas-container { position: fixed; top: 56px; left: 0; right: 0; bottom: 28px; overflow: hidden; background: #1a1a2e; }
+canvas { position: absolute; top: 0; left: 0; }
+
+/* ── Context menu ── */
+#context-menu {
+  display: none; position: fixed; z-index: 200;
+  background: #16213e; border: 1px solid #0f3460; border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5); padding: 4px 0; min-width: 180px;
+}
+#context-menu .item {
+  padding: 8px 16px; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 8px;
+}
+#context-menu .item:hover { background: #0f3460; }
+#context-menu .item.danger { color: #e94560; }
+#context-menu .sep-line { height: 1px; background: #0f3460; margin: 4px 0; }
+
+/* ── Text edit overlay ── */
+#text-edit-overlay {
+  display: none; position: fixed; z-index: 150;
+}
+#text-edit-overlay textarea {
+  background: rgba(22,33,62,0.95); border: 2px solid #e94560; color: #e0e0e0;
+  font-family: 'Segoe UI', sans-serif; font-size: 16px; padding: 8px; border-radius: 6px;
+  resize: none; outline: none; min-width: 120px; min-height: 40px;
+}
+
+/* ── Tooltip ── */
+.tooltip {
+  position: relative;
+}
+.tooltip::after {
+  content: attr(data-tip); position: absolute; bottom: -30px; left: 50%; transform: translateX(-50%);
+  background: #0f3460; color: #e0e0e0; padding: 3px 8px; border-radius: 4px; font-size: 11px;
+  white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.tooltip:hover::after { opacity: 1; }
+
+/* ── Minimap ── */
+#minimap {
+  position: fixed; bottom: 36px; right: 8px; width: 180px; height: 120px;
+  background: #16213e; border: 1px solid #0f3460; border-radius: 6px; z-index: 90;
+  overflow: hidden; opacity: 0.8;
+}
+#minimap:hover { opacity: 1; }
+#minimap canvas { width: 100%; height: 100%; }
+
+/* ── Layers panel ── */
+#layers-panel {
+  position: fixed; top: 56px; right: 0; width: 220px; bottom: 28px; z-index: 95;
+  background: #16213e; border-left: 1px solid #0f3460;
+  display: flex; flex-direction: column; transition: transform 0.2s;
+  font-size: 14px;
+}
+#layers-panel.hidden { transform: translateX(220px); }
+#layers-panel .panel-header {
+  padding: 10px 12px; font-weight: bold; font-size: 15px;
+  border-bottom: 1px solid #0f3460; display: flex; justify-content: space-between; align-items: center;
+}
+#layers-panel .panel-header button {
+  background: none; border: none; color: #e0e0e0; cursor: pointer; font-size: 18px; padding: 0 4px;
+}
+#layers-panel .panel-header button:hover { color: #e94560; }
+#layers-list {
+  flex: 1; overflow-y: auto; padding: 4px 0;
+}
+#layers-list .layer-item {
+  display: flex; align-items: center; gap: 6px; padding: 6px 12px; cursor: pointer;
+  border-bottom: 1px solid rgba(15,52,96,0.5);
+}
+#layers-list .layer-item:hover { background: rgba(15,52,96,0.5); }
+#layers-list .layer-item.active { background: #0f3460; border-left: 3px solid #e94560; }
+#layers-list .layer-item .layer-name {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#layers-list .layer-item .layer-name input {
+  background: transparent; border: none; border-bottom: 1px solid #e94560; color: #e0e0e0;
+  font-size: 14px; width: 100%; outline: none;
+}
+#layers-list .layer-item button {
+  background: none; border: none; color: #888; cursor: pointer; font-size: 14px; padding: 2px;
+}
+#layers-list .layer-item button:hover { color: #e94560; }
+#layers-panel .panel-footer {
+  padding: 8px 12px; border-top: 1px solid #0f3460; display: flex; gap: 6px;
+}
+#layers-panel .panel-footer button {
+  flex: 1; background: #1a1a2e; border: 1px solid #0f3460; color: #e0e0e0;
+  padding: 6px; border-radius: 4px; cursor: pointer; font-size: 13px;
+}
+#layers-panel .panel-footer button:hover { background: #0f3460; }
+</style>
+</head>
+<body>
+
+<!-- Toolbar -->
+<div id="toolbar">
+  <button id="tool-select" class="active tooltip" data-tip="Selection (V)" onclick="setTool('select')">&#9654; Select</button>
+  <button id="tool-rect" class="tooltip" data-tip="Rectangle (R)" onclick="setTool('rect')">&#9645; Rect</button>
+  <button id="tool-ellipse" class="tooltip" data-tip="Ellipse (E)" onclick="setTool('ellipse')">&#9711; Ellipse</button>
+  <button id="tool-diamond" class="tooltip" data-tip="Losange (D)" onclick="setTool('diamond')">&#9670; Losange</button>
+  <button id="tool-line" class="tooltip" data-tip="Ligne (L)" onclick="setTool('line')">&#9135; Ligne</button>
+  <button id="tool-arrow" class="tooltip" data-tip="Fleche (A)" onclick="setTool('arrow')">&#8594; Fleche</button>
+  <button id="tool-text" class="tooltip" data-tip="Texte (T)" onclick="setTool('text')">T Texte</button>
+  <button id="tool-pencil" class="tooltip" data-tip="Crayon (P)" onclick="setTool('pencil')">&#9998; Crayon</button>
+
+  <div class="sep"></div>
+
+  <label class="tooltip" data-tip="Couleur trait">
+    &#127912; <input type="color" id="stroke-color" value="#e94560" onchange="currentStroke=this.value">
+  </label>
+  <label class="tooltip" data-tip="Couleur fond">
+    &#9632; <input type="color" id="fill-color" value="#1a1a2e" onchange="currentFill=this.value">
+  </label>
+  <label class="tooltip" data-tip="Epaisseur">
+    <input type="range" id="stroke-width" min="1" max="10" value="2" onchange="currentWidth=+this.value">
+  </label>
+  <select id="font-size" onchange="currentFontSize=+this.value" title="Taille police">
+    <option value="14">14px</option>
+    <option value="18" selected>18px</option>
+    <option value="24">24px</option>
+    <option value="32">32px</option>
+    <option value="48">48px</option>
+  </select>
+
+  <div class="sep"></div>
+
+  <button class="tooltip" data-tip="Annuler (Ctrl+Z)" onclick="undo()">&#8630; Annuler</button>
+  <button class="tooltip" data-tip="Retablir (Ctrl+Y)" onclick="redo()">&#8631; Retablir</button>
+
+  <div class="sep"></div>
+
+  <button class="tooltip" data-tip="Exporter PNG" onclick="exportPNG()">&#128190; PNG</button>
+  <button class="tooltip" data-tip="Exporter SVG" onclick="exportSVG()">&#128190; SVG</button>
+  <button class="tooltip" data-tip="Sauvegarder (Ctrl+S)" onclick="saveLocal()">&#128190; Save</button>
+  <button class="tooltip" data-tip="Charger" onclick="loadLocal()">&#128194; Load</button>
+  <button class="tooltip" data-tip="Tout effacer" onclick="clearAll()">&#128465; Clear</button>
+  <div class="sep"></div>
+  <button class="tooltip" data-tip="Calques" onclick="toggleLayersPanel()">&#9776; Calques</button>
+</div>
+
+<!-- Canvas -->
+<div id="canvas-container">
+  <canvas id="main-canvas"></canvas>
+</div>
+
+<!-- Layers panel -->
+<div id="layers-panel" class="hidden">
+  <div class="panel-header">
+    Calques
+    <button onclick="toggleLayersPanel()" title="Fermer">&#10005;</button>
+  </div>
+  <div id="layers-list"></div>
+  <div class="panel-footer">
+    <button onclick="addLayer()">+ Ajouter</button>
+    <button onclick="mergeLayerDown()">Fusionner</button>
+  </div>
+</div>
+
+<!-- Minimap -->
+<div id="minimap"><canvas id="minimap-canvas"></canvas></div>
+
+<!-- Context menu -->
+<div id="context-menu">
+  <div class="item" onclick="editSelectedText()">&#9998; Renommer</div>
+  <div class="item" onclick="duplicateSelected()">&#128203; Dupliquer</div>
+  <div class="item" onclick="bringToFront()">&#8679; Premier plan</div>
+  <div class="item" onclick="sendToBack()">&#8681; Arriere-plan</div>
+  <div class="sep-line"></div>
+  <div class="item danger" onclick="deleteSelected()">&#128465; Supprimer</div>
+</div>
+
+<!-- Text edit overlay -->
+<div id="text-edit-overlay">
+  <textarea id="text-edit-area"></textarea>
+</div>
+
+<!-- Status bar -->
+<div id="statusbar">
+  <span id="status-tool">Outil: Select</span>
+  <span id="status-zoom">Zoom: 100%</span>
+  <span id="status-pos">X: 0 Y: 0</span>
+  <span id="status-layer">Calque: 1</span>
+  <span id="status-elements">Elements: 0</span>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────
+let elements = [];
+let undoStack = [];
+let redoStack = [];
+let currentTool = 'select';
+let currentStroke = '#e94560';
+let currentFill = '#1a1a2e';
+let currentWidth = 2;
+let currentFontSize = 18;
+
+// Layers (calques)
+let layers = [
+  { id: 1, name: 'Calque 1', visible: true, locked: false, opacity: 1 }
+];
+let activeLayerId = 1;
+let layerIdCounter = 1;
+
+// View transform
+let viewX = 0, viewY = 0, viewZoom = 1;
+
+// Interaction state
+let isDragging = false;
+let isPanning = false;
+let isResizing = false;
+let resizeHandle = '';
+let dragStartX = 0, dragStartY = 0;
+let dragOffsetX = 0, dragOffsetY = 0;
+let selectedIds = new Set();
+let hoveredId = null;
+let drawingElement = null;
+let pencilPoints = [];
+let multiSelectBox = null;
+
+// Canvas
+const container = document.getElementById('canvas-container');
+const canvas = document.getElementById('main-canvas');
+const ctx = canvas.getContext('2d');
+const minimapCanvas = document.getElementById('minimap-canvas');
+const minimapCtx = minimapCanvas.getContext('2d');
+
+let idCounter = 0;
+function newId() { return ++idCounter; }
+
+// ─────────────────────────────────────────────
+// Rough / Hand-drawn helpers
+// ─────────────────────────────────────────────
+function roughLine(ctx, x1, y1, x2, y2, stroke, width) {
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  // Draw 2 slightly offset lines for hand-drawn effect
+  for (let i = 0; i < 2; i++) {
+    ctx.beginPath();
+    const ox1 = x1 + (Math.random() - 0.5) * 2;
+    const oy1 = y1 + (Math.random() - 0.5) * 2;
+    const ox2 = x2 + (Math.random() - 0.5) * 2;
+    const oy2 = y2 + (Math.random() - 0.5) * 2;
+    // Add slight curve
+    const mx = (ox1 + ox2) / 2 + (Math.random() - 0.5) * 3;
+    const my = (oy1 + oy2) / 2 + (Math.random() - 0.5) * 3;
+    ctx.moveTo(ox1, oy1);
+    ctx.quadraticCurveTo(mx, my, ox2, oy2);
+    ctx.stroke();
+  }
+}
+
+function roughRect(ctx, x, y, w, h, stroke, fill, width) {
+  if (fill && fill !== 'transparent' && fill !== '#1a1a2e') {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.fill();
+  }
+  roughLine(ctx, x, y, x + w, y, stroke, width);
+  roughLine(ctx, x + w, y, x + w, y + h, stroke, width);
+  roughLine(ctx, x + w, y + h, x, y + h, stroke, width);
+  roughLine(ctx, x, y + h, x, y, stroke, width);
+}
+
+function roughEllipse(ctx, cx, cy, rx, ry, stroke, fill, width) {
+  if (fill && fill !== 'transparent' && fill !== '#1a1a2e') {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 2; i++) {
+    ctx.beginPath();
+    const pts = 40;
+    for (let j = 0; j <= pts; j++) {
+      const a = (j / pts) * Math.PI * 2;
+      const px = cx + rx * Math.cos(a) + (Math.random() - 0.5) * 2;
+      const py = cy + ry * Math.sin(a) + (Math.random() - 0.5) * 2;
+      if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+}
+
+function roughDiamond(ctx, x, y, w, h, stroke, fill, width) {
+  const cx = x + w/2, cy = y + h/2;
+  const pts = [[cx, y], [x+w, cy], [cx, y+h], [x, cy]];
+  if (fill && fill !== 'transparent' && fill !== '#1a1a2e') {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+    ctx.fill();
+  }
+  for (let i = 0; i < pts.length; i++) {
+    const n = (i + 1) % pts.length;
+    roughLine(ctx, pts[i][0], pts[i][1], pts[n][0], pts[n][1], stroke, width);
+  }
+}
+
+// ─────────────────────────────────────────────
+// Arrow head
+// ─────────────────────────────────────────────
+function drawArrowHead(ctx, x1, y1, x2, y2, stroke, width) {
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const len = 12 + width * 2;
+  ctx.strokeStyle = stroke;
+  ctx.fillStyle = stroke;
+  ctx.lineWidth = width;
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - len * Math.cos(angle - 0.4), y2 - len * Math.sin(angle - 0.4));
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - len * Math.cos(angle + 0.4), y2 - len * Math.sin(angle + 0.4));
+  ctx.stroke();
+}
+
+// ─────────────────────────────────────────────
+// Seed-based rough (deterministic per element)
+// ─────────────────────────────────────────────
+// We use a seeded random for consistent hand-drawn look
+let _seed = 1;
+function seededRandom() {
+  _seed = (_seed * 16807) % 2147483647;
+  return (_seed - 1) / 2147483646;
+}
+
+function roughLineSeed(ctx, x1, y1, x2, y2, stroke, width, seed) {
+  _seed = seed;
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (let i = 0; i < 2; i++) {
+    ctx.beginPath();
+    const ox1 = x1 + (seededRandom() - 0.5) * 2;
+    const oy1 = y1 + (seededRandom() - 0.5) * 2;
+    const ox2 = x2 + (seededRandom() - 0.5) * 2;
+    const oy2 = y2 + (seededRandom() - 0.5) * 2;
+    const mx = (ox1 + ox2) / 2 + (seededRandom() - 0.5) * 3;
+    const my = (oy1 + oy2) / 2 + (seededRandom() - 0.5) * 3;
+    ctx.moveTo(ox1, oy1);
+    ctx.quadraticCurveTo(mx, my, ox2, oy2);
+    ctx.stroke();
+  }
+}
+
+function roughRectSeed(ctx, x, y, w, h, stroke, fill, width, seed) {
+  if (fill && fill !== 'transparent' && fill !== '#1a1a2e') {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.fill();
+  }
+  roughLineSeed(ctx, x, y, x + w, y, stroke, width, seed);
+  roughLineSeed(ctx, x + w, y, x + w, y + h, stroke, width, seed + 100);
+  roughLineSeed(ctx, x + w, y + h, x, y + h, stroke, width, seed + 200);
+  roughLineSeed(ctx, x, y + h, x, y, stroke, width, seed + 300);
+}
+
+function roughEllipseSeed(ctx, cx, cy, rx, ry, stroke, fill, width, seed) {
+  _seed = seed;
+  if (fill && fill !== 'transparent' && fill !== '#1a1a2e') {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 2; i++) {
+    ctx.beginPath();
+    const pts = 40;
+    for (let j = 0; j <= pts; j++) {
+      const a = (j / pts) * Math.PI * 2;
+      const px = cx + rx * Math.cos(a) + (seededRandom() - 0.5) * 2;
+      const py = cy + ry * Math.sin(a) + (seededRandom() - 0.5) * 2;
+      if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+}
+
+function roughDiamondSeed(ctx, x, y, w, h, stroke, fill, width, seed) {
+  const cx = x + w/2, cy = y + h/2;
+  const pts = [[cx, y], [x+w, cy], [cx, y+h], [x, cy]];
+  if (fill && fill !== 'transparent' && fill !== '#1a1a2e') {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+    ctx.fill();
+  }
+  for (let i = 0; i < pts.length; i++) {
+    const n = (i + 1) % pts.length;
+    roughLineSeed(ctx, pts[i][0], pts[i][1], pts[n][0], pts[n][1], stroke, width, seed + i * 100);
+  }
+}
+
+// ─────────────────────────────────────────────
+// Render element
+// ─────────────────────────────────────────────
+function renderElement(c, el, isSelected) {
+  c.save();
+  const s = el.seed || 1;
+
+  switch(el.type) {
+    case 'rect':
+      roughRectSeed(c, el.x, el.y, el.w, el.h, el.stroke, el.fill, el.lineWidth, s);
+      // Draw label
+      if (el.label) {
+        c.fillStyle = el.stroke;
+        c.font = `${el.fontSize || 18}px 'Segoe UI', sans-serif`;
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        wrapText(c, el.label, el.x + el.w/2, el.y + el.h/2, el.w - 16, el.fontSize || 18);
+      }
+      break;
+    case 'ellipse': {
+      const rx = Math.abs(el.w)/2, ry = Math.abs(el.h)/2;
+      const cx = el.x + el.w/2, cy = el.y + el.h/2;
+      roughEllipseSeed(c, cx, cy, rx, ry, el.stroke, el.fill, el.lineWidth, s);
+      if (el.label) {
+        c.fillStyle = el.stroke;
+        c.font = `${el.fontSize || 18}px 'Segoe UI', sans-serif`;
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        wrapText(c, el.label, cx, cy, rx * 1.4, el.fontSize || 18);
+      }
+      break;
+    }
+    case 'diamond':
+      roughDiamondSeed(c, el.x, el.y, el.w, el.h, el.stroke, el.fill, el.lineWidth, s);
+      if (el.label) {
+        c.fillStyle = el.stroke;
+        c.font = `${el.fontSize || 18}px 'Segoe UI', sans-serif`;
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        wrapText(c, el.label, el.x + el.w/2, el.y + el.h/2, el.w * 0.5, el.fontSize || 18);
+      }
+      break;
+    case 'line': {
+      const allPts = getLinePoints(el);
+      for (let i = 0; i < allPts.length - 1; i++) {
+        roughLineSeed(c, allPts[i][0], allPts[i][1], allPts[i+1][0], allPts[i+1][1], el.stroke, el.lineWidth, s + i * 100);
+      }
+      // Dessiner les waypoints visibles
+      if (el.waypoints && el.waypoints.length > 0 && isSelected) {
+        el.waypoints.forEach(wp => {
+          c.fillStyle = '#4fc3f7';
+          c.beginPath();
+          c.arc(wp[0], wp[1], 5 / viewZoom, 0, Math.PI * 2);
+          c.fill();
+        });
+      }
+      break;
+    }
+    case 'arrow': {
+      const allPtsA = getLinePoints(el);
+      for (let i = 0; i < allPtsA.length - 1; i++) {
+        roughLineSeed(c, allPtsA[i][0], allPtsA[i][1], allPtsA[i+1][0], allPtsA[i+1][1], el.stroke, el.lineWidth, s + i * 100);
+      }
+      // Tete de fleche sur le dernier segment
+      const last = allPtsA[allPtsA.length - 1];
+      const beforeLast = allPtsA[allPtsA.length - 2];
+      drawArrowHead(c, beforeLast[0], beforeLast[1], last[0], last[1], el.stroke, el.lineWidth);
+      // Dessiner les waypoints visibles
+      if (el.waypoints && el.waypoints.length > 0 && isSelected) {
+        el.waypoints.forEach(wp => {
+          c.fillStyle = '#4fc3f7';
+          c.beginPath();
+          c.arc(wp[0], wp[1], 5 / viewZoom, 0, Math.PI * 2);
+          c.fill();
+        });
+      }
+      break;
+    }
+    case 'text':
+      c.fillStyle = el.stroke;
+      c.font = `${el.fontSize || 18}px 'Segoe UI', sans-serif`;
+      c.textAlign = 'left';
+      c.textBaseline = 'top';
+      const lines = (el.label || '').split('\n');
+      lines.forEach((line, i) => {
+        c.fillText(line, el.x, el.y + i * (el.fontSize || 18) * 1.3);
+      });
+      break;
+    case 'pencil':
+      if (el.points && el.points.length > 1) {
+        c.strokeStyle = el.stroke;
+        c.lineWidth = el.lineWidth;
+        c.lineCap = 'round';
+        c.lineJoin = 'round';
+        c.beginPath();
+        c.moveTo(el.points[0][0], el.points[0][1]);
+        for (let i = 1; i < el.points.length; i++) {
+          c.lineTo(el.points[i][0], el.points[i][1]);
+        }
+        c.stroke();
+      }
+      break;
+  }
+
+  // Selection handles
+  if (isSelected) {
+    c.strokeStyle = '#4fc3f7';
+    c.lineWidth = 1.5 / viewZoom;
+    c.setLineDash([4 / viewZoom, 4 / viewZoom]);
+    const b = getBounds(el);
+    c.strokeRect(b.x - 4, b.y - 4, b.w + 8, b.h + 8);
+    c.setLineDash([]);
+    // Resize handles
+    const hs = 6 / viewZoom;
+    c.fillStyle = '#4fc3f7';
+    const corners = [
+      [b.x - 4, b.y - 4], [b.x + b.w + 4, b.y - 4],
+      [b.x - 4, b.y + b.h + 4], [b.x + b.w + 4, b.y + b.h + 4]
+    ];
+    corners.forEach(([cx, cy]) => {
+      c.fillRect(cx - hs/2, cy - hs/2, hs, hs);
+    });
+    // Connection points (for arrows)
+    c.fillStyle = '#e94560';
+    const connPts = getConnectionPoints(el);
+    connPts.forEach(p => {
+      c.beginPath();
+      c.arc(p.x, p.y, 4 / viewZoom, 0, Math.PI * 2);
+      c.fill();
+    });
+  }
+
+  c.restore();
+}
+
+function wrapText(ctx, text, x, y, maxWidth, fontSize) {
+  const lines = text.split('\n');
+  const allLines = [];
+  lines.forEach(line => {
+    const words = line.split(' ');
+    let current = '';
+    words.forEach(word => {
+      const test = current ? current + ' ' + word : word;
+      if (ctx.measureText(test).width > maxWidth && current) {
+        allLines.push(current);
+        current = word;
+      } else {
+        current = test;
+      }
+    });
+    if (current) allLines.push(current);
+  });
+  const lineH = fontSize * 1.3;
+  const startY = y - (allLines.length - 1) * lineH / 2;
+  allLines.forEach((line, i) => {
+    ctx.fillText(line, x, startY + i * lineH);
+  });
+}
+
+// ─────────────────────────────────────────────
+// Helper: tous les points d'une ligne/fleche (debut + waypoints + fin)
+// ─────────────────────────────────────────────
+function getLinePoints(el) {
+  const pts = [[el.x, el.y]];
+  if (el.waypoints && el.waypoints.length > 0) {
+    el.waypoints.forEach(wp => pts.push(wp));
+  }
+  pts.push([el.x2, el.y2]);
+  return pts;
+}
+
+// ─────────────────────────────────────────────
+// Bounds / Hit testing
+// ─────────────────────────────────────────────
+function getBounds(el) {
+  switch(el.type) {
+    case 'rect': case 'ellipse': case 'diamond':
+      return { x: Math.min(el.x, el.x + el.w), y: Math.min(el.y, el.y + el.h), w: Math.abs(el.w), h: Math.abs(el.h) };
+    case 'line': case 'arrow': {
+      const allPts = getLinePoints(el);
+      let mnX = Infinity, mnY = Infinity, mxX = -Infinity, mxY = -Infinity;
+      allPts.forEach(p => { mnX = Math.min(mnX, p[0]); mnY = Math.min(mnY, p[1]); mxX = Math.max(mxX, p[0]); mxY = Math.max(mxY, p[1]); });
+      return { x: mnX, y: mnY, w: (mxX - mnX) || 10, h: (mxY - mnY) || 10 };
+    }
+    case 'text': {
+      ctx.font = `${el.fontSize || 18}px 'Segoe UI', sans-serif`;
+      const lines = (el.label || '').split('\n');
+      let mw = 0;
+      lines.forEach(l => { mw = Math.max(mw, ctx.measureText(l).width); });
+      return { x: el.x, y: el.y, w: mw || 50, h: lines.length * (el.fontSize || 18) * 1.3 };
+    }
+    case 'pencil': {
+      if (!el.points || el.points.length === 0) return { x: 0, y: 0, w: 0, h: 0 };
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      el.points.forEach(p => {
+        minX = Math.min(minX, p[0]); minY = Math.min(minY, p[1]);
+        maxX = Math.max(maxX, p[0]); maxY = Math.max(maxY, p[1]);
+      });
+      return { x: minX, y: minY, w: maxX - minX || 10, h: maxY - minY || 10 };
+    }
+    default: return { x: 0, y: 0, w: 0, h: 0 };
+  }
+}
+
+function hitTest(el, wx, wy) {
+  const b = getBounds(el);
+  const pad = 6;
+  if (el.type === 'line' || el.type === 'arrow') {
+    const allPts = getLinePoints(el);
+    for (let i = 0; i < allPts.length - 1; i++) {
+      if (distToSegment(wx, wy, allPts[i][0], allPts[i][1], allPts[i+1][0], allPts[i+1][1]) < 10) return true;
+    }
+    return false;
+  }
+  return wx >= b.x - pad && wx <= b.x + b.w + pad && wy >= b.y - pad && wy <= b.y + b.h + pad;
+}
+
+function distToSegment(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len2 = dx*dx + dy*dy;
+  if (len2 === 0) return Math.hypot(px - x1, py - y1);
+  let t = ((px-x1)*dx + (py-y1)*dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t*dx), py - (y1 + t*dy));
+}
+
+function getConnectionPoints(el) {
+  const b = getBounds(el);
+  return [
+    { x: b.x + b.w/2, y: b.y, dir: 'top' },
+    { x: b.x + b.w, y: b.y + b.h/2, dir: 'right' },
+    { x: b.x + b.w/2, y: b.y + b.h, dir: 'bottom' },
+    { x: b.x, y: b.y + b.h/2, dir: 'left' }
+  ];
+}
+
+function getResizeHandle(el, wx, wy) {
+  const b = getBounds(el);
+  const hs = 8 / viewZoom;
+  const corners = [
+    { x: b.x - 4, y: b.y - 4, handle: 'nw' },
+    { x: b.x + b.w + 4, y: b.y - 4, handle: 'ne' },
+    { x: b.x - 4, y: b.y + b.h + 4, handle: 'sw' },
+    { x: b.x + b.w + 4, y: b.y + b.h + 4, handle: 'se' }
+  ];
+  for (const c of corners) {
+    if (Math.abs(wx - c.x) < hs && Math.abs(wy - c.y) < hs) return c.handle;
+  }
+  return null;
+}
+
+// ─────────────────────────────────────────────
+// Screen <-> World coordinates
+// ─────────────────────────────────────────────
+function screenToWorld(sx, sy) {
+  return {
+    x: (sx - viewX) / viewZoom,
+    y: (sy - viewY) / viewZoom
+  };
+}
+
+function worldToScreen(wx, wy) {
+  return {
+    x: wx * viewZoom + viewX,
+    y: wy * viewZoom + viewY
+  };
+}
+
+// ─────────────────────────────────────────────
+// Render all
+// ─────────────────────────────────────────────
+function render() {
+  const W = container.clientWidth;
+  const H = container.clientHeight;
+  canvas.width = W * devicePixelRatio;
+  canvas.height = H * devicePixelRatio;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+
+  // Clear
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, 0, W, H);
+
+  // Grid
+  ctx.save();
+  ctx.translate(viewX, viewY);
+  ctx.scale(viewZoom, viewZoom);
+  drawGrid(ctx, W, H);
+
+  // Elements - rendu par calque (ordre des calques)
+  layers.forEach(layer => {
+    if (!layer.visible) return;
+    ctx.globalAlpha = layer.opacity;
+    elements.forEach(el => {
+      if ((el.layerId || 1) !== layer.id) return;
+      renderElement(ctx, el, selectedIds.has(el.id));
+    });
+  });
+  ctx.globalAlpha = 1;
+
+  // Drawing element (in progress)
+  if (drawingElement) {
+    renderElement(ctx, drawingElement, false);
+  }
+
+  // Multi-select box
+  if (multiSelectBox) {
+    ctx.strokeStyle = '#4fc3f7';
+    ctx.lineWidth = 1 / viewZoom;
+    ctx.setLineDash([4 / viewZoom, 4 / viewZoom]);
+    ctx.strokeRect(multiSelectBox.x, multiSelectBox.y, multiSelectBox.w, multiSelectBox.h);
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(79,195,247,0.08)';
+    ctx.fillRect(multiSelectBox.x, multiSelectBox.y, multiSelectBox.w, multiSelectBox.h);
+  }
+
+  ctx.restore();
+
+  // Update status
+  updateStatus();
+  renderMinimap();
+}
+
+function drawGrid(c, W, H) {
+  const gridSize = 20;
+  c.strokeStyle = 'rgba(255,255,255,0.04)';
+  c.lineWidth = 0.5 / viewZoom;
+  const startX = Math.floor((-viewX / viewZoom) / gridSize) * gridSize;
+  const startY = Math.floor((-viewY / viewZoom) / gridSize) * gridSize;
+  const endX = startX + W / viewZoom + gridSize;
+  const endY = startY + H / viewZoom + gridSize;
+  c.beginPath();
+  for (let x = startX; x < endX; x += gridSize) {
+    c.moveTo(x, startY);
+    c.lineTo(x, endY);
+  }
+  for (let y = startY; y < endY; y += gridSize) {
+    c.moveTo(startX, y);
+    c.lineTo(endX, y);
+  }
+  c.stroke();
+}
+
+function renderMinimap() {
+  const mw = 180, mh = 120;
+  minimapCanvas.width = mw * devicePixelRatio;
+  minimapCanvas.height = mh * devicePixelRatio;
+  minimapCanvas.style.width = mw + 'px';
+  minimapCanvas.style.height = mh + 'px';
+  minimapCtx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  minimapCtx.fillStyle = '#1a1a2e';
+  minimapCtx.fillRect(0, 0, mw, mh);
+
+  if (elements.length === 0) return;
+
+  // Find bounding box of all elements
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  elements.forEach(el => {
+    const b = getBounds(el);
+    minX = Math.min(minX, b.x); minY = Math.min(minY, b.y);
+    maxX = Math.max(maxX, b.x + b.w); maxY = Math.max(maxY, b.y + b.h);
+  });
+  const padding = 50;
+  minX -= padding; minY -= padding; maxX += padding; maxY += padding;
+  const bw = maxX - minX || 1, bh = maxY - minY || 1;
+  const scale = Math.min(mw / bw, mh / bh);
+
+  minimapCtx.save();
+  minimapCtx.translate((mw - bw * scale) / 2, (mh - bh * scale) / 2);
+  minimapCtx.scale(scale, scale);
+  minimapCtx.translate(-minX, -minY);
+
+  // Draw elements as simple shapes
+  elements.forEach(el => {
+    const b = getBounds(el);
+    minimapCtx.fillStyle = el.stroke || '#e94560';
+    minimapCtx.globalAlpha = 0.6;
+    minimapCtx.fillRect(b.x, b.y, b.w || 4, b.h || 4);
+  });
+
+  // Viewport indicator
+  minimapCtx.globalAlpha = 1;
+  minimapCtx.strokeStyle = '#4fc3f7';
+  minimapCtx.lineWidth = 2 / scale;
+  const vw = container.clientWidth / viewZoom;
+  const vh = container.clientHeight / viewZoom;
+  minimapCtx.strokeRect(-viewX / viewZoom, -viewY / viewZoom, vw, vh);
+
+  minimapCtx.restore();
+}
+
+// ─────────────────────────────────────────────
+// Tool management
+// ─────────────────────────────────────────────
+function setTool(tool) {
+  currentTool = tool;
+  document.querySelectorAll('#toolbar button[id^="tool-"]').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('tool-' + tool);
+  if (btn) btn.classList.add('active');
+  canvas.style.cursor = tool === 'select' ? 'default' : 'crosshair';
+  document.getElementById('status-tool').textContent = 'Outil: ' + tool.charAt(0).toUpperCase() + tool.slice(1);
+}
+
+// ─────────────────────────────────────────────
+// History
+// ─────────────────────────────────────────────
+function pushHistory() {
+  undoStack.push(JSON.stringify({ elements, layers, activeLayerId }));
+  if (undoStack.length > 100) undoStack.shift();
+  redoStack = [];
+}
+
+function undo() {
+  if (undoStack.length === 0) return;
+  redoStack.push(JSON.stringify({ elements, layers, activeLayerId }));
+  const state = JSON.parse(undoStack.pop());
+  elements = state.elements || state;
+  if (state.layers) { layers = state.layers; activeLayerId = state.activeLayerId || layers[layers.length-1].id; layerIdCounter = layers.reduce((m,l) => Math.max(m,l.id), 0); }
+  idCounter = (Array.isArray(elements) ? elements : []).reduce((m, e) => Math.max(m, e.id), 0);
+  selectedIds.clear();
+  renderLayersList();
+  render();
+}
+
+function redo() {
+  if (redoStack.length === 0) return;
+  undoStack.push(JSON.stringify({ elements, layers, activeLayerId }));
+  const state = JSON.parse(redoStack.pop());
+  elements = state.elements || state;
+  if (state.layers) { layers = state.layers; activeLayerId = state.activeLayerId || layers[layers.length-1].id; layerIdCounter = layers.reduce((m,l) => Math.max(m,l.id), 0); }
+  idCounter = (Array.isArray(elements) ? elements : []).reduce((m, e) => Math.max(m, e.id), 0);
+  selectedIds.clear();
+  renderLayersList();
+  render();
+}
+
+// ─────────────────────────────────────────────
+// Mouse events
+// ─────────────────────────────────────────────
+let lastMouseX = 0, lastMouseY = 0;
+
+canvas.addEventListener('mousedown', (e) => {
+  hideContextMenu();
+  const rect = canvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left;
+  const sy = e.clientY - rect.top;
+  const w = screenToWorld(sx, sy);
+  lastMouseX = sx; lastMouseY = sy;
+
+  // Middle button or Space+Left = pan
+  if (e.button === 1 || (e.button === 0 && e.altKey)) {
+    isPanning = true;
+    dragStartX = sx; dragStartY = sy;
+    canvas.style.cursor = 'grabbing';
+    return;
+  }
+
+  if (e.button === 2) return; // right click handled by contextmenu
+
+  if (currentTool === 'select') {
+    // Check resize handle on selected
+    for (const id of selectedIds) {
+      const el = elements.find(e => e.id === id);
+      if (el && (el.type === 'rect' || el.type === 'ellipse' || el.type === 'diamond')) {
+        const handle = getResizeHandle(el, w.x, w.y);
+        if (handle) {
+          isResizing = true;
+          resizeHandle = handle;
+          dragStartX = w.x; dragStartY = w.y;
+          pushHistory();
+          return;
+        }
+      }
+    }
+
+    // Check hit (ignorer calques invisibles/verrouilles)
+    let hit = null;
+    for (let i = elements.length - 1; i >= 0; i--) {
+      const elLayer = layers.find(l => l.id === (elements[i].layerId || 1));
+      if (elLayer && (!elLayer.visible || elLayer.locked)) continue;
+      if (hitTest(elements[i], w.x, w.y)) {
+        hit = elements[i];
+        break;
+      }
+    }
+    if (hit) {
+      if (e.shiftKey) {
+        if (selectedIds.has(hit.id)) selectedIds.delete(hit.id);
+        else selectedIds.add(hit.id);
+      } else if (!selectedIds.has(hit.id)) {
+        selectedIds.clear();
+        selectedIds.add(hit.id);
+      }
+      isDragging = true;
+      dragStartX = w.x; dragStartY = w.y;
+      pushHistory();
+    } else {
+      selectedIds.clear();
+      // Start multi-select
+      multiSelectBox = { x: w.x, y: w.y, w: 0, h: 0 };
+      dragStartX = w.x; dragStartY = w.y;
+    }
+    render();
+    return;
+  }
+
+  // Verifier que le calque actif n'est pas verrouille
+  const activeLayer = layers.find(l => l.id === activeLayerId);
+  if (activeLayer && activeLayer.locked) {
+    showToast('Calque verrouille');
+    return;
+  }
+
+  // Drawing tools
+  pushHistory();
+  const seed = Math.floor(Math.random() * 100000) + 1;
+  const _lid = activeLayerId;
+
+  if (currentTool === 'rect') {
+    drawingElement = { id: newId(), type: 'rect', layerId: _lid, x: w.x, y: w.y, w: 0, h: 0, stroke: currentStroke, fill: currentFill, lineWidth: currentWidth, label: '', fontSize: currentFontSize, seed };
+  } else if (currentTool === 'ellipse') {
+    drawingElement = { id: newId(), type: 'ellipse', layerId: _lid, x: w.x, y: w.y, w: 0, h: 0, stroke: currentStroke, fill: currentFill, lineWidth: currentWidth, label: '', fontSize: currentFontSize, seed };
+  } else if (currentTool === 'diamond') {
+    drawingElement = { id: newId(), type: 'diamond', layerId: _lid, x: w.x, y: w.y, w: 0, h: 0, stroke: currentStroke, fill: currentFill, lineWidth: currentWidth, label: '', fontSize: currentFontSize, seed };
+  } else if (currentTool === 'line') {
+    drawingElement = { id: newId(), type: 'line', layerId: _lid, x: w.x, y: w.y, x2: w.x, y2: w.y, waypoints: [], stroke: currentStroke, lineWidth: currentWidth, seed };
+  } else if (currentTool === 'arrow') {
+    drawingElement = { id: newId(), type: 'arrow', layerId: _lid, x: w.x, y: w.y, x2: w.x, y2: w.y, waypoints: [], stroke: currentStroke, lineWidth: currentWidth, seed };
+  } else if (currentTool === 'text') {
+    const el = { id: newId(), type: 'text', layerId: _lid, x: w.x, y: w.y, stroke: currentStroke, lineWidth: currentWidth, label: '', fontSize: currentFontSize, seed };
+    elements.push(el);
+    selectedIds.clear();
+    selectedIds.add(el.id);
+    render();
+    startTextEdit(el);
+    return;
+  } else if (currentTool === 'pencil') {
+    pencilPoints = [[w.x, w.y]];
+    drawingElement = { id: newId(), type: 'pencil', layerId: _lid, points: pencilPoints, stroke: currentStroke, lineWidth: currentWidth, seed };
+  }
+
+  isDragging = true;
+  render();
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left;
+  const sy = e.clientY - rect.top;
+  const w = screenToWorld(sx, sy);
+
+  document.getElementById('status-pos').textContent = `X: ${Math.round(w.x)} Y: ${Math.round(w.y)}`;
+
+  if (isPanning) {
+    viewX += sx - lastMouseX;
+    viewY += sy - lastMouseY;
+    lastMouseX = sx; lastMouseY = sy;
+    render();
+    return;
+  }
+
+  if (isResizing && selectedIds.size === 1) {
+    const el = elements.find(e => selectedIds.has(e.id));
+    if (el) {
+      const dx = w.x - dragStartX;
+      const dy = w.y - dragStartY;
+      if (resizeHandle.includes('e')) el.w += dx;
+      if (resizeHandle.includes('w')) { el.x += dx; el.w -= dx; }
+      if (resizeHandle.includes('s')) el.h += dy;
+      if (resizeHandle.includes('n')) { el.y += dy; el.h -= dy; }
+      dragStartX = w.x; dragStartY = w.y;
+    }
+    render();
+    return;
+  }
+
+  if (isDragging && currentTool === 'select') {
+    const dx = w.x - dragStartX;
+    const dy = w.y - dragStartY;
+    selectedIds.forEach(id => {
+      const el = elements.find(e => e.id === id);
+      if (el) {
+        el.x += dx; el.y += dy;
+        if ('x2' in el) { el.x2 += dx; el.y2 += dy; }
+        if (el.waypoints) el.waypoints = el.waypoints.map(p => [p[0]+dx, p[1]+dy]);
+        if (el.points) el.points = el.points.map(p => [p[0]+dx, p[1]+dy]);
+      }
+    });
+    dragStartX = w.x; dragStartY = w.y;
+    render();
+    return;
+  }
+
+  if (multiSelectBox) {
+    multiSelectBox.w = w.x - dragStartX;
+    multiSelectBox.h = w.y - dragStartY;
+    render();
+    return;
+  }
+
+  if (drawingElement) {
+    if (drawingElement.type === 'pencil') {
+      pencilPoints.push([w.x, w.y]);
+      drawingElement.points = pencilPoints;
+    } else if (drawingElement.type === 'line' || drawingElement.type === 'arrow') {
+      drawingElement.x2 = w.x;
+      drawingElement.y2 = w.y;
+    } else {
+      drawingElement.w = w.x - drawingElement.x;
+      drawingElement.h = w.y - drawingElement.y;
+    }
+    render();
+    return;
+  }
+
+  // Hover cursor
+  if (currentTool === 'select') {
+    let hovered = false;
+    for (const id of selectedIds) {
+      const el = elements.find(e => e.id === id);
+      if (el && (el.type === 'rect' || el.type === 'ellipse' || el.type === 'diamond')) {
+        const h = getResizeHandle(el, w.x, w.y);
+        if (h) {
+          canvas.style.cursor = h + '-resize';
+          hovered = true;
+          break;
+        }
+      }
+    }
+    if (!hovered) {
+      for (let i = elements.length - 1; i >= 0; i--) {
+        if (hitTest(elements[i], w.x, w.y)) {
+          canvas.style.cursor = 'move';
+          hovered = true;
+          break;
+        }
+      }
+    }
+    if (!hovered) canvas.style.cursor = 'default';
+  }
+
+  lastMouseX = sx; lastMouseY = sy;
+});
+
+canvas.addEventListener('mouseup', (e) => {
+  if (isPanning) {
+    isPanning = false;
+    canvas.style.cursor = currentTool === 'select' ? 'default' : 'crosshair';
+    return;
+  }
+
+  if (isResizing) {
+    isResizing = false;
+    render();
+    return;
+  }
+
+  if (multiSelectBox) {
+    // Select all elements within box
+    const bx = Math.min(multiSelectBox.x, multiSelectBox.x + multiSelectBox.w);
+    const by = Math.min(multiSelectBox.y, multiSelectBox.y + multiSelectBox.h);
+    const bw = Math.abs(multiSelectBox.w);
+    const bh = Math.abs(multiSelectBox.h);
+    if (bw > 5 || bh > 5) {
+      elements.forEach(el => {
+        const eb = getBounds(el);
+        if (eb.x >= bx && eb.y >= by && eb.x + eb.w <= bx + bw && eb.y + eb.h <= by + bh) {
+          selectedIds.add(el.id);
+        }
+      });
+    }
+    multiSelectBox = null;
+    render();
+    return;
+  }
+
+  if (drawingElement) {
+    // Minimum size check for shapes
+    if (drawingElement.type === 'rect' || drawingElement.type === 'ellipse' || drawingElement.type === 'diamond') {
+      if (Math.abs(drawingElement.w) < 10 && Math.abs(drawingElement.h) < 10) {
+        // Default size
+        drawingElement.w = 160;
+        drawingElement.h = 80;
+        drawingElement.x -= 80;
+        drawingElement.y -= 40;
+      }
+      // Normalize negative dimensions
+      if (drawingElement.w < 0) { drawingElement.x += drawingElement.w; drawingElement.w = -drawingElement.w; }
+      if (drawingElement.h < 0) { drawingElement.y += drawingElement.h; drawingElement.h = -drawingElement.h; }
+    }
+    elements.push(drawingElement);
+    selectedIds.clear();
+    selectedIds.add(drawingElement.id);
+
+    // Auto-prompt for label on shapes
+    if (['rect', 'ellipse', 'diamond'].includes(drawingElement.type)) {
+      const el = drawingElement;
+      drawingElement = null;
+      render();
+      startTextEdit(el);
+      return;
+    }
+    drawingElement = null;
+    isDragging = false;
+    render();
+    return;
+  }
+
+  isDragging = false;
+  render();
+});
+
+// ─────────────────────────────────────────────
+// Zoom (wheel)
+// ─────────────────────────────────────────────
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left;
+  const sy = e.clientY - rect.top;
+
+  const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+  const newZoom = Math.min(5, Math.max(0.1, viewZoom * zoomFactor));
+
+  // Zoom toward cursor
+  viewX = sx - (sx - viewX) * (newZoom / viewZoom);
+  viewY = sy - (sy - viewY) * (newZoom / viewZoom);
+  viewZoom = newZoom;
+
+  document.getElementById('status-zoom').textContent = `Zoom: ${Math.round(viewZoom * 100)}%`;
+  render();
+}, { passive: false });
+
+// ─────────────────────────────────────────────
+// Context menu
+// ─────────────────────────────────────────────
+canvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left;
+  const sy = e.clientY - rect.top;
+  const w = screenToWorld(sx, sy);
+
+  // Select element under cursor (ignorer calques invisibles/verrouilles)
+  let hit = null;
+  for (let i = elements.length - 1; i >= 0; i--) {
+    const elLayer = layers.find(l => l.id === (elements[i].layerId || 1));
+    if (elLayer && (!elLayer.visible || elLayer.locked)) continue;
+    if (hitTest(elements[i], w.x, w.y)) { hit = elements[i]; break; }
+  }
+  if (hit) {
+    if (!selectedIds.has(hit.id)) {
+      selectedIds.clear();
+      selectedIds.add(hit.id);
+    }
+    render();
+    showContextMenu(e.clientX, e.clientY);
+  }
+});
+
+function showContextMenu(x, y) {
+  const menu = document.getElementById('context-menu');
+  menu.style.display = 'block';
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
+}
+function hideContextMenu() {
+  document.getElementById('context-menu').style.display = 'none';
+}
+document.addEventListener('click', hideContextMenu);
+
+// ─────────────────────────────────────────────
+// Context menu actions
+// ─────────────────────────────────────────────
+function deleteSelected() {
+  if (selectedIds.size === 0) return;
+  pushHistory();
+  elements = elements.filter(e => !selectedIds.has(e.id));
+  selectedIds.clear();
+  hideContextMenu();
+  render();
+}
+
+function duplicateSelected() {
+  if (selectedIds.size === 0) return;
+  pushHistory();
+  const newIds = new Set();
+  selectedIds.forEach(id => {
+    const el = elements.find(e => e.id === id);
+    if (el) {
+      const copy = JSON.parse(JSON.stringify(el));
+      copy.id = newId();
+      copy.x += 20; copy.y += 20;
+      if ('x2' in copy) { copy.x2 += 20; copy.y2 += 20; }
+      if (copy.waypoints) copy.waypoints = copy.waypoints.map(p => [p[0]+20, p[1]+20]);
+      if (copy.points) copy.points = copy.points.map(p => [p[0]+20, p[1]+20]);
+      elements.push(copy);
+      newIds.add(copy.id);
+    }
+  });
+  selectedIds.clear();
+  newIds.forEach(id => selectedIds.add(id));
+  hideContextMenu();
+  render();
+}
+
+function bringToFront() {
+  selectedIds.forEach(id => {
+    const idx = elements.findIndex(e => e.id === id);
+    if (idx >= 0) {
+      const el = elements.splice(idx, 1)[0];
+      elements.push(el);
+    }
+  });
+  hideContextMenu();
+  render();
+}
+
+function sendToBack() {
+  const toMove = [];
+  selectedIds.forEach(id => {
+    const idx = elements.findIndex(e => e.id === id);
+    if (idx >= 0) toMove.push(elements.splice(idx, 1)[0]);
+  });
+  elements = [...toMove, ...elements];
+  hideContextMenu();
+  render();
+}
+
+function editSelectedText() {
+  hideContextMenu();
+  if (selectedIds.size !== 1) return;
+  const el = elements.find(e => selectedIds.has(e.id));
+  if (el) startTextEdit(el);
+}
+
+// ─────────────────────────────────────────────
+// Text editing
+// ─────────────────────────────────────────────
+function startTextEdit(el) {
+  const overlay = document.getElementById('text-edit-overlay');
+  const textarea = document.getElementById('text-edit-area');
+
+  const b = getBounds(el);
+  const sp = worldToScreen(b.x, b.y);
+
+  overlay.style.display = 'block';
+  overlay.style.left = sp.x + 'px';
+  overlay.style.top = (sp.y + 56) + 'px'; // offset for toolbar
+
+  textarea.value = el.label || '';
+  textarea.style.width = Math.max(160, b.w * viewZoom) + 'px';
+  textarea.style.height = Math.max(60, b.h * viewZoom * 0.6) + 'px';
+  textarea.style.fontSize = (el.fontSize || 18) + 'px';
+  textarea.focus();
+  textarea.select();
+
+  function finishEdit() {
+    pushHistory();
+    el.label = textarea.value;
+    overlay.style.display = 'none';
+    textarea.removeEventListener('blur', finishEdit);
+    textarea.removeEventListener('keydown', onKey);
+    render();
+  }
+
+  function onKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      finishEdit();
+    }
+    if (e.key === 'Escape') {
+      overlay.style.display = 'none';
+      textarea.removeEventListener('blur', finishEdit);
+      textarea.removeEventListener('keydown', onKey);
+    }
+  }
+
+  textarea.addEventListener('blur', finishEdit);
+  textarea.addEventListener('keydown', onKey);
+}
+
+// ─────────────────────────────────────────────
+// Double-click to edit text
+// ─────────────────────────────────────────────
+canvas.addEventListener('dblclick', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left;
+  const sy = e.clientY - rect.top;
+  const w = screenToWorld(sx, sy);
+
+  for (let i = elements.length - 1; i >= 0; i--) {
+    if (hitTest(elements[i], w.x, w.y)) {
+      selectedIds.clear();
+      selectedIds.add(elements[i].id);
+      render();
+      startTextEdit(elements[i]);
+      return;
+    }
+  }
+});
+
+// ─────────────────────────────────────────────
+// Keyboard shortcuts
+// ─────────────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  // Don't intercept when editing text
+  if (document.getElementById('text-edit-overlay').style.display === 'block') return;
+
+  const ctrl = e.ctrlKey || e.metaKey;
+
+  if (e.key === 'Delete' || e.key === 'Backspace') { deleteSelected(); e.preventDefault(); }
+  if (ctrl && e.key === 'z') { undo(); e.preventDefault(); }
+  if (ctrl && e.key === 'y') { redo(); e.preventDefault(); }
+  if (ctrl && e.key === 's') { saveLocal(); e.preventDefault(); }
+  if (ctrl && e.key === 'a') { elements.forEach(el => selectedIds.add(el.id)); render(); e.preventDefault(); }
+  if (ctrl && e.key === 'd') { duplicateSelected(); e.preventDefault(); }
+  if (ctrl && e.key === 'c') { copySelected(); e.preventDefault(); }
+  if (ctrl && e.key === 'v') { pasteElements(); e.preventDefault(); }
+
+  // Tool shortcuts
+  if (e.key === 'v' || e.key === 'V') setTool('select');
+  if (e.key === 'r' || e.key === 'R') setTool('rect');
+  if (e.key === 'e' || e.key === 'E') setTool('ellipse');
+  if (e.key === 'd' && !ctrl) setTool('diamond');
+  if (e.key === 'l' || e.key === 'L') setTool('line');
+  if (e.key === 'a' && !ctrl) setTool('arrow');
+  if (e.key === 't' || e.key === 'T') setTool('text');
+  if (e.key === 'p' || e.key === 'P') setTool('pencil');
+
+  // Espace = ajouter un waypoint pendant le dessin d'une fleche/ligne
+  if (e.key === ' ' && drawingElement && (drawingElement.type === 'arrow' || drawingElement.type === 'line')) {
+    e.preventDefault();
+    if (!drawingElement.waypoints) drawingElement.waypoints = [];
+    drawingElement.waypoints.push([drawingElement.x2, drawingElement.y2]);
+    render();
+    return;
+  }
+
+  // Escape
+  if (e.key === 'Escape') {
+    selectedIds.clear();
+    drawingElement = null;
+    setTool('select');
+    render();
+  }
+
+  // Arrow keys to move selected
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key) && selectedIds.size > 0) {
+    e.preventDefault();
+    pushHistory();
+    const step = e.shiftKey ? 10 : 1;
+    const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+    const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+    selectedIds.forEach(id => {
+      const el = elements.find(e => e.id === id);
+      if (el) {
+        el.x += dx; el.y += dy;
+        if ('x2' in el) { el.x2 += dx; el.y2 += dy; }
+        if (el.waypoints) el.waypoints = el.waypoints.map(p => [p[0]+dx, p[1]+dy]);
+        if (el.points) el.points = el.points.map(p => [p[0]+dx, p[1]+dy]);
+      }
+    });
+    render();
+  }
+});
+
+// ─────────────────────────────────────────────
+// Copy/Paste
+// ─────────────────────────────────────────────
+let clipboard = [];
+function copySelected() {
+  clipboard = [];
+  selectedIds.forEach(id => {
+    const el = elements.find(e => e.id === id);
+    if (el) clipboard.push(JSON.parse(JSON.stringify(el)));
+  });
+}
+function pasteElements() {
+  if (clipboard.length === 0) return;
+  pushHistory();
+  selectedIds.clear();
+  clipboard.forEach(el => {
+    const copy = JSON.parse(JSON.stringify(el));
+    copy.id = newId();
+    copy.x += 30; copy.y += 30;
+    if ('x2' in copy) { copy.x2 += 30; copy.y2 += 30; }
+    if (copy.waypoints) copy.waypoints = copy.waypoints.map(p => [p[0]+30, p[1]+30]);
+    if (copy.points) copy.points = copy.points.map(p => [p[0]+30, p[1]+30]);
+    elements.push(copy);
+    selectedIds.add(copy.id);
+  });
+  // Update clipboard offset for next paste
+  clipboard.forEach(el => { el.x += 30; el.y += 30; });
+  render();
+}
+
+// ─────────────────────────────────────────────
+// Save / Load
+// ─────────────────────────────────────────────
+function saveLocal() {
+  const data = { elements, viewX, viewY, viewZoom, idCounter, layers, activeLayerId };
+  localStorage.setItem('archidraw-save', JSON.stringify(data));
+  showToast('Sauvegarde OK');
+}
+
+function loadLocal() {
+  const raw = localStorage.getItem('archidraw-save');
+  if (!raw) { showToast('Aucune sauvegarde'); return; }
+  try {
+    const data = JSON.parse(raw);
+    elements = data.elements || [];
+    viewX = data.viewX || 0;
+    viewY = data.viewY || 0;
+    viewZoom = data.viewZoom || 1;
+    idCounter = data.idCounter || elements.length;
+    if (data.layers && data.layers.length > 0) {
+      layers = data.layers;
+      layerIdCounter = layers.reduce((m, l) => Math.max(m, l.id), 0);
+      activeLayerId = data.activeLayerId || layers[layers.length - 1].id;
+    }
+    selectedIds.clear();
+    undoStack = [];
+    redoStack = [];
+    renderLayersList();
+    render();
+    showToast('Chargement OK');
+  } catch(e) {
+    showToast('Erreur de chargement');
+  }
+}
+
+function clearAll() {
+  if (!confirm('Tout effacer ?')) return;
+  pushHistory();
+  elements = [];
+  selectedIds.clear();
+  render();
+}
+
+// ─────────────────────────────────────────────
+// Export PNG
+// ─────────────────────────────────────────────
+function exportPNG() {
+  if (elements.length === 0) { showToast('Rien a exporter'); return; }
+  const padding = 40;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  elements.forEach(el => {
+    const b = getBounds(el);
+    minX = Math.min(minX, b.x); minY = Math.min(minY, b.y);
+    maxX = Math.max(maxX, b.x + b.w); maxY = Math.max(maxY, b.y + b.h);
+  });
+  const w = maxX - minX + padding * 2;
+  const h = maxY - minY + padding * 2;
+  const expCanvas = document.createElement('canvas');
+  expCanvas.width = w * 2;
+  expCanvas.height = h * 2;
+  const ec = expCanvas.getContext('2d');
+  ec.scale(2, 2);
+  ec.fillStyle = '#1a1a2e';
+  ec.fillRect(0, 0, w, h);
+  ec.translate(padding - minX, padding - minY);
+  elements.forEach(el => renderElement(ec, el, false));
+
+  const link = document.createElement('a');
+  link.download = 'archidraw-export.png';
+  link.href = expCanvas.toDataURL('image/png');
+  link.click();
+  showToast('PNG exporte');
+}
+
+// ─────────────────────────────────────────────
+// Export SVG
+// ─────────────────────────────────────────────
+function exportSVG() {
+  if (elements.length === 0) { showToast('Rien a exporter'); return; }
+  const padding = 40;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  elements.forEach(el => {
+    const b = getBounds(el);
+    minX = Math.min(minX, b.x); minY = Math.min(minY, b.y);
+    maxX = Math.max(maxX, b.x + b.w); maxY = Math.max(maxY, b.y + b.h);
+  });
+  const w = maxX - minX + padding * 2;
+  const h = maxY - minY + padding * 2;
+  const ox = padding - minX, oy = padding - minY;
+
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">\n`;
+  svg += `<rect width="${w}" height="${h}" fill="#1a1a2e"/>\n`;
+
+  elements.forEach(el => {
+    switch(el.type) {
+      case 'rect':
+        svg += `<rect x="${el.x+ox}" y="${el.y+oy}" width="${el.w}" height="${el.h}" fill="${el.fill}" stroke="${el.stroke}" stroke-width="${el.lineWidth}"/>\n`;
+        if (el.label) svg += `<text x="${el.x+el.w/2+ox}" y="${el.y+el.h/2+oy}" fill="${el.stroke}" font-size="${el.fontSize||18}" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI,sans-serif">${escXml(el.label)}</text>\n`;
+        break;
+      case 'ellipse': {
+        const rx = Math.abs(el.w)/2, ry = Math.abs(el.h)/2;
+        svg += `<ellipse cx="${el.x+el.w/2+ox}" cy="${el.y+el.h/2+oy}" rx="${rx}" ry="${ry}" fill="${el.fill}" stroke="${el.stroke}" stroke-width="${el.lineWidth}"/>\n`;
+        if (el.label) svg += `<text x="${el.x+el.w/2+ox}" y="${el.y+el.h/2+oy}" fill="${el.stroke}" font-size="${el.fontSize||18}" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI,sans-serif">${escXml(el.label)}</text>\n`;
+        break;
+      }
+      case 'diamond': {
+        const cx = el.x+el.w/2+ox, cy = el.y+el.h/2+oy;
+        svg += `<polygon points="${cx},${el.y+oy} ${el.x+el.w+ox},${cy} ${cx},${el.y+el.h+oy} ${el.x+ox},${cy}" fill="${el.fill}" stroke="${el.stroke}" stroke-width="${el.lineWidth}"/>\n`;
+        if (el.label) svg += `<text x="${cx}" y="${cy}" fill="${el.stroke}" font-size="${el.fontSize||18}" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI,sans-serif">${escXml(el.label)}</text>\n`;
+        break;
+      }
+      case 'line': {
+        const lPts = getLinePoints(el);
+        svg += `<polyline points="${lPts.map(p=>`${p[0]+ox},${p[1]+oy}`).join(' ')}" fill="none" stroke="${el.stroke}" stroke-width="${el.lineWidth}" stroke-linecap="round" stroke-linejoin="round"/>\n`;
+        break;
+      }
+      case 'arrow': {
+        const aPts = getLinePoints(el);
+        svg += `<defs><marker id="arrowhead-${el.id}" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="${el.stroke}"/></marker></defs>\n`;
+        svg += `<polyline points="${aPts.map(p=>`${p[0]+ox},${p[1]+oy}`).join(' ')}" fill="none" stroke="${el.stroke}" stroke-width="${el.lineWidth}" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrowhead-${el.id})"/>\n`;
+        break;
+      }
+      case 'text':
+        svg += `<text x="${el.x+ox}" y="${el.y+oy+(el.fontSize||18)}" fill="${el.stroke}" font-size="${el.fontSize||18}" font-family="Segoe UI,sans-serif">${escXml(el.label||'')}</text>\n`;
+        break;
+      case 'pencil':
+        if (el.points && el.points.length > 1) {
+          svg += `<polyline points="${el.points.map(p=>`${p[0]+ox},${p[1]+oy}`).join(' ')}" fill="none" stroke="${el.stroke}" stroke-width="${el.lineWidth}" stroke-linecap="round" stroke-linejoin="round"/>\n`;
+        }
+        break;
+    }
+  });
+
+  svg += '</svg>';
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const link = document.createElement('a');
+  link.download = 'archidraw-export.svg';
+  link.href = URL.createObjectURL(blob);
+  link.click();
+  showToast('SVG exporte');
+}
+
+function escXml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ─────────────────────────────────────────────
+// Toast
+// ─────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;bottom:40px;left:50%;transform:translateX(-50%);background:#0f3460;color:#e0e0e0;padding:8px 20px;border-radius:6px;z-index:999;font-size:14px;box-shadow:0 4px 15px rgba(0,0,0,0.4);transition:opacity 0.3s;';
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2000);
+}
+
+// ─────────────────────────────────────────────
+// Status bar
+// ─────────────────────────────────────────────
+function updateStatus() {
+  document.getElementById('status-elements').textContent = `Elements: ${elements.length}`;
+  document.getElementById('status-zoom').textContent = `Zoom: ${Math.round(viewZoom * 100)}%`;
+  const al = layers.find(l => l.id === activeLayerId);
+  document.getElementById('status-layer').textContent = `Calque: ${al ? al.name : '?'}`;
+}
+
+// ─────────────────────────────────────────────
+// Touch support (basic pan/zoom)
+// ─────────────────────────────────────────────
+let touches = {};
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  for (const t of e.changedTouches) touches[t.identifier] = { x: t.clientX, y: t.clientY };
+  if (e.touches.length === 2) {
+    const t1 = e.touches[0], t2 = e.touches[1];
+    touches._pinchDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  if (e.touches.length === 2) {
+    const t1 = e.touches[0], t2 = e.touches[1];
+    const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+    if (touches._pinchDist) {
+      const scale = dist / touches._pinchDist;
+      const cx = (t1.clientX + t2.clientX) / 2;
+      const cy = (t1.clientY + t2.clientY) / 2;
+      const newZoom = Math.min(5, Math.max(0.1, viewZoom * scale));
+      viewX = cx - (cx - viewX) * (newZoom / viewZoom);
+      viewY = cy - (cy - viewY) * (newZoom / viewZoom);
+      viewZoom = newZoom;
+    }
+    touches._pinchDist = dist;
+    const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - (touches[e.touches[0].identifier].x + touches[e.touches[1].identifier].x) / 2;
+    const my = (e.touches[0].clientY + e.touches[1].clientY) / 2 - (touches[e.touches[0].identifier].y + touches[e.touches[1].identifier].y) / 2;
+    render();
+  } else if (e.touches.length === 1) {
+    const t = e.touches[0];
+    const prev = touches[t.identifier];
+    if (prev) {
+      viewX += t.clientX - prev.x;
+      viewY += t.clientY - prev.y;
+    }
+    touches[t.identifier] = { x: t.clientX, y: t.clientY };
+    render();
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => {
+  for (const t of e.changedTouches) delete touches[t.identifier];
+  delete touches._pinchDist;
+});
+
+// ─────────────────────────────────────────────
+// Resize
+// ─────────────────────────────────────────────
+window.addEventListener('resize', render);
+
+// ─────────────────────────────────────────────
+// Layers (calques)
+// ─────────────────────────────────────────────
+function toggleLayersPanel() {
+  document.getElementById('layers-panel').classList.toggle('hidden');
+  renderLayersList();
+}
+
+function renderLayersList() {
+  const list = document.getElementById('layers-list');
+  list.innerHTML = '';
+  // Afficher les calques du haut (dernier) vers le bas (premier)
+  [...layers].reverse().forEach(layer => {
+    const count = elements.filter(e => (e.layerId || 1) === layer.id).length;
+    const div = document.createElement('div');
+    div.className = 'layer-item' + (layer.id === activeLayerId ? ' active' : '');
+    div.innerHTML = `
+      <button onclick="toggleLayerVisibility(${layer.id})" title="${layer.visible ? 'Masquer' : 'Afficher'}">${layer.visible ? '&#128065;' : '&#128683;'}</button>
+      <button onclick="toggleLayerLock(${layer.id})" title="${layer.locked ? 'Deverrouiller' : 'Verrouiller'}">${layer.locked ? '&#128274;' : '&#128275;'}</button>
+      <span class="layer-name" ondblclick="renameLayer(${layer.id}, this)">${layer.name} <small style="color:#888">(${count})</small></span>
+      <input type="range" min="0" max="1" step="0.1" value="${layer.opacity}" style="width:50px;accent-color:#e94560;" onchange="setLayerOpacity(${layer.id}, +this.value)" title="Opacite">
+      ${layers.length > 1 ? `<button onclick="deleteLayer(${layer.id})" title="Supprimer" style="color:#e94560;">&#10005;</button>` : ''}
+    `;
+    div.addEventListener('click', (e) => {
+      if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+      setActiveLayer(layer.id);
+    });
+    list.appendChild(div);
+  });
+}
+
+function setActiveLayer(id) {
+  activeLayerId = id;
+  renderLayersList();
+  render();
+}
+
+function addLayer() {
+  layerIdCounter++;
+  const newLayer = { id: layerIdCounter, name: `Calque ${layerIdCounter}`, visible: true, locked: false, opacity: 1 };
+  layers.push(newLayer);
+  activeLayerId = newLayer.id;
+  renderLayersList();
+  render();
+  showToast('Calque ajoute');
+}
+
+function deleteLayer(id) {
+  if (layers.length <= 1) return;
+  if (!confirm('Supprimer ce calque et ses elements ?')) return;
+  pushHistory();
+  elements = elements.filter(e => (e.layerId || 1) !== id);
+  layers = layers.filter(l => l.id !== id);
+  if (activeLayerId === id) activeLayerId = layers[layers.length - 1].id;
+  selectedIds.clear();
+  renderLayersList();
+  render();
+  showToast('Calque supprime');
+}
+
+function toggleLayerVisibility(id) {
+  const layer = layers.find(l => l.id === id);
+  if (layer) {
+    layer.visible = !layer.visible;
+    renderLayersList();
+    render();
+  }
+}
+
+function toggleLayerLock(id) {
+  const layer = layers.find(l => l.id === id);
+  if (layer) {
+    layer.locked = !layer.locked;
+    renderLayersList();
+    render();
+  }
+}
+
+function setLayerOpacity(id, val) {
+  const layer = layers.find(l => l.id === id);
+  if (layer) {
+    layer.opacity = val;
+    render();
+  }
+}
+
+function renameLayer(id, span) {
+  const layer = layers.find(l => l.id === id);
+  if (!layer) return;
+  const input = document.createElement('input');
+  input.value = layer.name;
+  span.innerHTML = '';
+  span.appendChild(input);
+  input.focus();
+  input.select();
+  function finish() {
+    layer.name = input.value || layer.name;
+    renderLayersList();
+    input.removeEventListener('blur', finish);
+    input.removeEventListener('keydown', onKey);
+  }
+  function onKey(e) {
+    if (e.key === 'Enter') finish();
+    if (e.key === 'Escape') { renderLayersList(); }
+  }
+  input.addEventListener('blur', finish);
+  input.addEventListener('keydown', onKey);
+}
+
+function mergeLayerDown() {
+  const idx = layers.findIndex(l => l.id === activeLayerId);
+  if (idx <= 0) { showToast('Pas de calque en dessous'); return; }
+  pushHistory();
+  const targetId = layers[idx - 1].id;
+  elements.forEach(el => {
+    if ((el.layerId || 1) === activeLayerId) el.layerId = targetId;
+  });
+  layers.splice(idx, 1);
+  activeLayerId = targetId;
+  renderLayersList();
+  render();
+  showToast('Calques fusionnes');
+}
+
+// ─────────────────────────────────────────────
+// Auto-load on start
+// ─────────────────────────────────────────────
+(function init() {
+  const saved = localStorage.getItem('archidraw-save');
+  if (saved) {
+    try {
+      const data = JSON.parse(saved);
+      elements = data.elements || [];
+      viewX = data.viewX || 0;
+      viewY = data.viewY || 0;
+      viewZoom = data.viewZoom || 1;
+      idCounter = data.idCounter || elements.length;
+      if (data.layers && data.layers.length > 0) {
+        layers = data.layers;
+        layerIdCounter = layers.reduce((m, l) => Math.max(m, l.id), 0);
+        activeLayerId = data.activeLayerId || layers[layers.length - 1].id;
+      }
+    } catch(e) {}
+  }
+  render();
+})();
+</script>
+</body>
+</html>
