@@ -329,6 +329,7 @@ async def candle_websocket(websocket: WebSocket):
                                 nq_pred, nq_pct
                             )
 
+            # Payload leger : seulement les donnees temps reel
             payload = {
                 "type": "update",
                 "symbol": symbol,
@@ -337,26 +338,28 @@ async def candle_websocket(websocket: WebSocket):
                 "last_closed_candle": last_closed,
                 "micro_candles": micro or [],
                 "tick": tick,
-                "history": history,
-                "closed_signature": cached_signature,
-                "transition_probs": cached_transitions,
-                "prediction_result": cached_prediction_result,
-                "prediction_stats": cached_prediction_stats,
-                "live_estimate": live_estimate,
                 "micro_prediction": micro_prediction,
                 "close_prediction": close_prediction,
-                "saved_quarters": list(quarters_saved),
-                "next_quarter_prediction": (
-                    await asyncio.to_thread(
-                        predict_next_quarter, grid_moves,
-                        min(4, int(candle_progress * 4) + 1),
-                        current_candle["open"], current_candle["close"],
-                        current_candle["high"], current_candle["low"]
-                    ) if grid_moves and len(grid_moves) >= 2 and candle_progress < 0.75 else None
-                ),
-                "close_stats": cached_close_stats,
                 "candle_progress": round(candle_progress, 3),
             }
+
+            # Donnees statiques : envoyees seulement quand elles changent
+            if closed_time == last_classified_time or not hasattr(candle_websocket, '_last_sent_closed'):
+                payload["history"] = history
+                payload["closed_signature"] = cached_signature
+                payload["transition_probs"] = cached_transitions
+                payload["prediction_result"] = cached_prediction_result
+                payload["prediction_stats"] = cached_prediction_stats
+                payload["close_stats"] = cached_close_stats
+
+            # Next quarter prediction (seulement si en cours)
+            if grid_moves and len(grid_moves) >= 2 and candle_progress < 0.75:
+                payload["next_quarter_prediction"] = await asyncio.to_thread(
+                    predict_next_quarter, grid_moves,
+                    min(4, int(candle_progress * 4) + 1),
+                    current_candle["open"], current_candle["close"],
+                    current_candle["high"], current_candle["low"]
+                )
 
             await websocket.send_json(payload)
             await asyncio.sleep(WS_UPDATE_INTERVAL)

@@ -170,8 +170,11 @@ def classify_candle(candle: dict, micro_candles: list, timeframe: str) -> dict |
     timing = pair_ab
 
     # --- Session horaire ---
+    # Le timestamp est en broker time. FusionMarkets = UTC+3 en hiver, UTC+3 en ete.
+    # On centralise l'offset dans config pour pouvoir le changer facilement.
+    from config import BROKER_UTC_OFFSET
     broker_hour = (candle_start // 3600) % 24
-    utc_hour = (broker_hour - 3) % 24
+    utc_hour = (broker_hour - BROKER_UTC_OFFSET) % 24
 
     if 0 <= utc_hour < 8:
         session = "ASIE"

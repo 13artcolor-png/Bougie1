@@ -200,8 +200,9 @@ async def export_history(symbol: str, timeframe: str):
 
     from datetime import datetime, timedelta
     for r in rows:
-        # Broker time (UTC+3) -> Paris (UTC+2 ete = -1h)
-        dt = datetime.fromtimestamp(r["candle_time"]) - timedelta(hours=1)
+        # Broker time -> Paris (difference = BROKER_UTC_OFFSET - PARIS_UTC_OFFSET)
+        from config import BROKER_UTC_OFFSET, PARIS_UTC_OFFSET
+        dt = datetime.fromtimestamp(r["candle_time"]) - timedelta(hours=BROKER_UTC_OFFSET - PARIS_UTC_OFFSET)
         date_str = dt.strftime("%Y-%m-%d %H:%M")
         bullish = r["closed_bullish"]
         cloture = "HAUSSE" if bullish else "BAISSE"

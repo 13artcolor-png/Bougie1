@@ -28,3 +28,11 @@ TIMEFRAMES = {
 
 # Intervalle de mise a jour WebSocket (secondes)
 WS_UPDATE_INTERVAL = 1.0
+
+# Offset timezone du broker (FusionMarkets = UTC+3)
+# Modifier si le broker change de fuseau
+BROKER_UTC_OFFSET = 3
+
+# Offset pour conversion vers heure locale Paris
+# UTC+1 hiver, UTC+2 ete (a ajuster manuellement au changement d'heure)
+PARIS_UTC_OFFSET = 2

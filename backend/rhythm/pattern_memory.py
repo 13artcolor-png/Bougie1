@@ -298,5 +298,21 @@ def backfill_patterns(symbol: str, timeframe: str):
         if (i + 1) % 1000 == 0:
             logger.info(f"  {i + 1}/{len(rows)} bougies traitees")
 
+    # Nettoyage : supprimer les patterns vus moins de 3 fois
+    cleanup_rare_patterns(symbol, timeframe, min_count=3)
+
     stats = get_memory_stats(symbol, timeframe)
     logger.info(f"Dictionnaire rempli : {stats['total_patterns']} patterns, {stats['total_entries']} entrees")
+
+
+def cleanup_rare_patterns(symbol: str, timeframe: str, min_count: int = 3):
+    """Supprime les patterns vus moins de min_count fois."""
+    conn = _get_conn()
+    deleted = conn.execute("""
+        DELETE FROM pattern_memory
+        WHERE symbol = ? AND timeframe = ? AND count < ?
+    """, (symbol, timeframe, min_count)).rowcount
+    conn.commit()
+    conn.close()
+    if deleted > 0:
+        logger.info(f"Nettoyage : {deleted} patterns rares supprimes (< {min_count} occurrences)")
