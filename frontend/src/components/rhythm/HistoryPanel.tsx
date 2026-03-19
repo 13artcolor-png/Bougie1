@@ -13,7 +13,10 @@ interface HistoryPanelProps {
 }
 
 function formatTime(timestamp: number): string {
-  const d = new Date(timestamp * 1000);
+  // Timestamp en broker time (UTC+3), convertir en Paris (UTC+1 hiver / UTC+2 ete)
+  // On soustrait 1h pour passer de UTC+3 a UTC+2 (heure d'ete Paris)
+  const parisTimestamp = timestamp - 3600;
+  const d = new Date(parisTimestamp * 1000);
   return d.toLocaleString("fr-FR", {
     day: "2-digit", month: "2-digit",
     hour: "2-digit", minute: "2-digit",
@@ -65,7 +68,7 @@ export default function HistoryPanel({ visible, onClose }: HistoryPanelProps) {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a3e]">
           <span className="text-[18px] text-white font-bold">
-            Historique des mouvements ({entries.length} bougies)
+            Historique des mouvements ({entries.length} bougies) - Heure Paris
           </span>
           <div className="flex gap-2 items-center">
             <span className="text-[#888] text-[14px]">Nombre :</span>

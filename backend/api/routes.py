@@ -7,6 +7,7 @@ from rhythm.storage import get_last_signatures, get_transition_probs
 from rhythm.stats import get_global_stats
 from rhythm.direction import analyze_direction
 from rhythm.custom_formula import get_formula, save_formula
+from rhythm.auto_optimize import optimize_formula
 from rhythm.close_tracker import get_close_stats
 from fastapi import Body
 
@@ -191,13 +192,15 @@ async def export_history(symbol: str, timeframe: str):
     lines = []
     lines.append(f"# Historique {symbol} {timeframe} - {len(rows)} bougies")
     lines.append(f"# Format standard pour l'outil de formule")
-    lines.append(f"# Date | Cloture | Mouvements")
+    lines.append(f"# Heures en heure de Paris (UTC+2 ete / UTC+1 hiver)")
+    lines.append(f"# Q1-Q4 = direction du prix a chaque quart (HAUSSE/BAISSE)")
     lines.append(f"#")
-    lines.append("Date | Cloture | Mouvements | Nb_U | Nb_D | Nb_moves")
+    lines.append("Date | Cloture | Mouvements | Q1_dir | Q2_dir | Q3_dir | Q4_dir | Nb_U | Nb_D | Nb_moves")
 
-    from datetime import datetime
+    from datetime import datetime, timedelta
     for r in rows:
-        dt = datetime.fromtimestamp(r["candle_time"])
+        # Broker time (UTC+3) -> Paris (UTC+2 ete = -1h)
+        dt = datetime.fromtimestamp(r["candle_time"]) - timedelta(hours=1)
         date_str = dt.strftime("%Y-%m-%d %H:%M")
         bullish = r["closed_bullish"]
         cloture = "HAUSSE" if bullish else "BAISSE"
@@ -206,9 +209,27 @@ async def export_history(symbol: str, timeframe: str):
         nb_u = sum(len(m) for m in move_list if m and m[0] == "U")
         nb_d = sum(len(m) for m in move_list if m and m[0] == "D")
         nb_moves = len(move_list)
-        lines.append(f"{date_str} | {cloture} | {moves} | {nb_u} | {nb_d} | {nb_moves}")
+
+        # Direction par quart : calculer le bilan U/D a chaque quart des mouvements
+        q_dirs = []
+        for q in range(1, 5):
+            cut = max(1, int(len(move_list) * q / 4))
+            partial = move_list[:cut]
+            partial_u = sum(len(m) for m in partial if m and m[0] == "U")
+            partial_d = sum(len(m) for m in partial if m and m[0] == "D")
+            q_dirs.append("HAUSSE" if partial_u >= partial_d else "BAISSE")
+
+        lines.append(f"{date_str} | {cloture} | {moves} | {q_dirs[0]} | {q_dirs[1]} | {q_dirs[2]} | {q_dirs[3]} | {nb_u} | {nb_d} | {nb_moves}")
 
     return {"content": "\n".join(lines), "filename": f"{symbol}_{timeframe}_export.txt", "count": len(rows)}
+
+
+@router.post("/optimize/{symbol}/{timeframe}")
+async def optimize(symbol: str, timeframe: str):
+    """Lance l'optimisation de la formule pour un actif"""
+    import asyncio
+    result = await asyncio.to_thread(optimize_formula, symbol, timeframe)
+    return result
 
 
 @router.post("/export-mt5/{symbol}/{timeframe}")

@@ -16,6 +16,7 @@ from rhythm.custom_formula import execute_formula
 from rhythm.close_tracker import save_close_result, get_close_stats, save_quarter_prediction, finalize_quarter_predictions
 from rhythm.next_quarter_formula import predict_next_quarter
 from rhythm.auto_backfill import auto_backfill
+from rhythm.auto_optimize import optimize_formula
 
 logger = get_logger("ws.candle_stream")
 
@@ -44,6 +45,7 @@ async def candle_websocket(websocket: WebSocket):
     quarters_saved = set()  # Quarts deja sauvegardes pour la bougie en cours
     current_candle_time_for_quarters = 0
     quarter_prices = {}  # Prix a chaque quart pour verification next_q
+    candles_since_optimize = 0  # Compteur pour auto-optimisation
 
     try:
         while True:
@@ -140,6 +142,13 @@ async def candle_websocket(websocket: WebSocket):
                     quarters_saved = set()
                     current_candle_time_for_quarters = 0
                     quarter_prices = {}
+
+                    # Auto-optimisation toutes les 100 bougies
+                    candles_since_optimize += 1
+                    if candles_since_optimize >= 100:
+                        candles_since_optimize = 0
+                        logger.info("Auto-optimisation lancee (100 bougies)")
+                        asyncio.create_task(asyncio.to_thread(optimize_formula, symbol, timeframe))
 
                 if closed_micro and len(closed_micro) >= 2:
                     last_closed_with_symbol = {**last_closed, "symbol": symbol}

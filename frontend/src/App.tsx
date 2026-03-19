@@ -6,6 +6,7 @@ import TransitionPanel from "./components/rhythm/TransitionPanel";
 import FormulaEditor from "./components/rhythm/FormulaEditor";
 import HistoryPanel from "./components/rhythm/HistoryPanel";
 import QuartersPanel from "./components/rhythm/QuartersPanel";
+import OptimizerPanel from "./components/rhythm/OptimizerPanel";
 import { useWebSocket } from "./hooks/useWebSocket";
 import type { Candle } from "./types/candle";
 
@@ -92,6 +93,7 @@ export default function App() {
   const [showFormula, setShowFormula] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showQuarters, setShowQuarters] = useState(false);
+  const [showOptimizer, setShowOptimizer] = useState(false);
 
   // Zoom vertical (1 = normal, < 1 = zoom in, > 1 = zoom out)
   const [zoomY, setZoomY] = useState(1);
@@ -257,6 +259,7 @@ export default function App() {
         onOpenFormula={() => setShowFormula(true)}
         onOpenHistory={() => setShowHistory(true)}
         onOpenQuarters={() => setShowQuarters(true)}
+        onOpenOptimizer={() => setShowOptimizer(true)}
         symbol={symbol}
       />
 
@@ -273,6 +276,12 @@ export default function App() {
       <QuartersPanel
         visible={showQuarters}
         onClose={() => setShowQuarters(false)}
+      />
+
+      <OptimizerPanel
+        visible={showOptimizer}
+        onClose={() => setShowOptimizer(false)}
+        symbol={symbol}
       />
 
       {/* Barre d'erreur si deconnecte ou erreur */}

@@ -9,6 +9,7 @@ interface TransitionPanelProps {
   onOpenFormula?: () => void;
   onOpenHistory?: () => void;
   onOpenQuarters?: () => void;
+  onOpenOptimizer?: () => void;
   symbol?: string;
 }
 
@@ -18,7 +19,7 @@ function moveColor(m: string): string {
   return "#f97316";
 }
 
-export default function TransitionPanel({ microPrediction, closePrediction, closeStats, progress, onOpenFormula, onOpenHistory, onOpenQuarters, symbol }: TransitionPanelProps) {
+export default function TransitionPanel({ microPrediction, closePrediction, closeStats, progress, onOpenFormula, onOpenHistory, onOpenQuarters, onOpenOptimizer, symbol }: TransitionPanelProps) {
   const mp = microPrediction;
   const cp = closePrediction;
   const cs = closeStats;
@@ -101,6 +102,12 @@ export default function TransitionPanel({ microPrediction, closePrediction, clos
           <button onClick={onOpenHistory}
             className="px-3 py-1 bg-[#2a2a3e] text-[#888] rounded text-[16px] cursor-pointer hover:bg-[#3a3a5e] hover:text-white transition-colors">
             Historique
+          </button>
+        )}
+        {onOpenOptimizer && (
+          <button onClick={onOpenOptimizer}
+            className="px-3 py-1 bg-[#8888ff] text-white rounded text-[16px] cursor-pointer hover:bg-[#6666dd] transition-colors font-bold">
+            Optimiser
           </button>
         )}
         {symbol && (
