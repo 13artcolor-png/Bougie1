@@ -172,47 +172,43 @@ def extract_history(symbol: str, timeframe: str = "M15", output_file: str = None
         print("ERREUR: aucune bougie traitee")
         return
 
-    # Ecrire le fichier
+    # Ecrire le fichier au format unifie (avec H/B aux quarts)
     print(f"Ecriture dans {output_file}...")
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
     with open(output_file, "w", encoding="utf-8") as f:
-        # Header
-        f.write(f"# Historique {symbol} M15 - {processed} bougies\n")
-        f.write(f"# Genere le {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
-        f.write(f"#\n")
-        f.write(f"# Format: Date | O | H | L | C | Q1 | Q2 | Q3 | Q4 | Resultat | Mouvements\n")
-        f.write(f"#\n")
-
-        # Stats WR
         total = len(results)
-        q1_ok = sum(1 for r in results if r["q1"].get("prediction") == r["actual"])
-        q2_ok = sum(1 for r in results if r["q2"].get("prediction") == r["actual"])
-        q3_ok = sum(1 for r in results if r["q3"].get("prediction") == r["actual"])
-        q4_ok = sum(1 for r in results if r["q4"].get("prediction") == r["actual"])
-
-        f.write(f"# WR Q1: {q1_ok}/{total} ({round(q1_ok/total*100,1)}%)\n")
-        f.write(f"# WR Q2: {q2_ok}/{total} ({round(q2_ok/total*100,1)}%)\n")
-        f.write(f"# WR Q3: {q3_ok}/{total} ({round(q3_ok/total*100,1)}%)\n")
-        f.write(f"# WR Q4: {q4_ok}/{total} ({round(q4_ok/total*100,1)}%)\n")
+        f.write(f"# Historique {symbol} M15 - {total} bougies\n")
+        f.write(f"# Genere le {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
+        f.write(f"# Source : MT5 historique (H/B simules)\n")
+        f.write(f"# Format unifie : mouvements U/D avec marqueurs H/B aux quarts\n")
+        f.write(f"# H = prix au-dessus de l'open, B = en-dessous\n")
         f.write(f"#\n")
-        f.write(f"Date|Open|High|Low|Close|Q1_pred|Q1_pct|Q2_pred|Q2_pct|Q3_pred|Q3_pct|Q4_pred|Q4_pct|Resultat|Mouvements\n")
+        f.write(f"Date | Cloture | Mouvements\n")
 
         for r in results:
-            q1 = r["q1"]
-            q2 = r["q2"]
-            q3 = r["q3"]
-            q4 = r["q4"]
-            line = f"{r['date']}|{r['open']:.2f}|{r['high']:.2f}|{r['low']:.2f}|{r['close']:.2f}"
-            line += f"|{q1.get('prediction','')}|{q1.get('pct',0)}"
-            line += f"|{q2.get('prediction','')}|{q2.get('pct',0)}"
-            line += f"|{q3.get('prediction','')}|{q3.get('pct',0)}"
-            line += f"|{q4.get('prediction','')}|{q4.get('pct',0)}"
-            line += f"|{r['actual']}|{r['moves']}\n"
-            f.write(line)
+            moves_list = r["moves"].split(",")
+
+            # Inserer H ou B aux quarts
+            enriched = []
+            for i, m in enumerate(moves_list):
+                enriched.append(m)
+                position = (i + 1) / len(moves_list)
+                for q_pct in [0.25, 0.50, 0.75]:
+                    prev_pos = i / len(moves_list)
+                    if prev_pos < q_pct <= position:
+                        partial = moves_list[:i + 1]
+                        partial_u = sum(len(m2) for m2 in partial if m2 and m2[0] == "U")
+                        partial_d = sum(len(m2) for m2 in partial if m2 and m2[0] == "D")
+                        enriched.append("H" if partial_u >= partial_d else "B")
+
+            # Marqueur final
+            enriched.append("H" if r["actual"] == "HAUSSE" else "B")
+
+            f.write(f"{r['date']} | {r['actual']} | {','.join(enriched)}\n")
 
     print(f"\nFichier sauvegarde: {output_file}")
-    print(f"WR Q1: {round(q1_ok/total*100,1)}%  Q2: {round(q2_ok/total*100,1)}%  Q3: {round(q3_ok/total*100,1)}%  Q4: {round(q4_ok/total*100,1)}%")
+    print(f"{total} bougies au format unifie avec H/B")
 
 
 if __name__ == "__main__":

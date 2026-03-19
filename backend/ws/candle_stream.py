@@ -17,6 +17,7 @@ from rhythm.close_tracker import save_close_result, get_close_stats, save_quarte
 from rhythm.next_quarter_formula import predict_next_quarter
 from rhythm.auto_backfill import auto_backfill
 from rhythm.auto_optimize import optimize_formula
+from rhythm.pattern_memory import learn_from_candle, predict_close as pattern_predict_close, backfill_patterns
 
 logger = get_logger("ws.candle_stream")
 
@@ -61,6 +62,7 @@ async def candle_websocket(websocket: WebSocket):
                     logger.info(f"Symbole change: {symbol}")
                     # Backfill automatique en arriere-plan
                     asyncio.create_task(asyncio.to_thread(auto_backfill, symbol, timeframe))
+                    asyncio.create_task(asyncio.to_thread(backfill_patterns, symbol, timeframe))
                 if "timeframe" in data:
                     timeframe = data["timeframe"]
                     last_classified_time = 0
@@ -142,6 +144,13 @@ async def candle_websocket(websocket: WebSocket):
                     quarters_saved = set()
                     current_candle_time_for_quarters = 0
                     quarter_prices = {}
+
+                    # Apprendre cette bougie dans le dictionnaire de patterns
+                    if grid_moves and len(grid_moves) >= 3:
+                        actual_close = "HAUSSE" if last_closed["close"] > last_closed["open"] else "BAISSE"
+                        await asyncio.to_thread(
+                            learn_from_candle, symbol, timeframe, grid_moves, actual_close
+                        )
 
                     # Auto-optimisation toutes les 100 bougies
                     candles_since_optimize += 1
@@ -240,6 +249,7 @@ async def candle_websocket(websocket: WebSocket):
             # Prediction par franchissements de lignes de grille
             micro_prediction = None
             close_prediction = None
+            grid_moves = []
             if micro_m1_for_estimate and len(micro_m1_for_estimate) >= 3:
                 candle_h = current_candle["high"]
                 candle_l = current_candle["low"]
@@ -249,19 +259,36 @@ async def candle_websocket(websocket: WebSocket):
                     if micro_prediction.get("prediction"):
                         micro_prediction["current_moves"] = grid_moves
 
-                    # Prediction par formule personnalisable
+                    # --- Systeme de prediction (2 niveaux) ---
+                    # 1. DICTIONNAIRE DE PATTERNS (prioritaire) : se souvient des patterns passes
+                    # 2. FORMULE ALGORITHMIQUE (fallback) : calcul mathematique si dictionnaire insuffisant
+
+                    # Niveau 1 : dictionnaire
+                    dict_prediction = await asyncio.to_thread(
+                        pattern_predict_close, symbol, timeframe, grid_moves, candle_progress
+                    )
+
+                    # Niveau 2 : formule (fallback)
                     prev_c = last_closed["close"] if last_closed else current_candle["open"]
-                    close_prediction = await asyncio.to_thread(
+                    formula_prediction = await asyncio.to_thread(
                         execute_formula,
                         grid_moves, candle_progress,
                         current_candle["open"], current_candle["high"],
                         current_candle["low"], current_candle["close"],
                         prev_c
                     )
-                    # Ajouter les infos pour le frontend
-                    if close_prediction:
-                        close_prediction["total_samples"] = len(grid_moves)
-                        close_prediction["current_moves"] = grid_moves
+
+                    # Selection : dictionnaire si >= 20 echantillons, sinon formule
+                    if dict_prediction and dict_prediction.get("prediction") and dict_prediction.get("total_samples", 0) >= 20:
+                        close_prediction = dict_prediction
+                        close_prediction["source"] = "dictionnaire"
+                    elif formula_prediction and formula_prediction.get("prediction"):
+                        close_prediction = formula_prediction
+                        close_prediction["source"] = "formule"
+                    else:
+                        close_prediction = {"prediction": None, "source": "aucun"}
+
+                    close_prediction["current_moves"] = grid_moves
                     # Garder la derniere prediction pour la verifier a la cloture
                     if close_prediction and close_prediction.get("prediction"):
                         last_close_prediction = close_prediction

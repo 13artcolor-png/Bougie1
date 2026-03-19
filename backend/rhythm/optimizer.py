@@ -131,12 +131,21 @@ def parser_fichier(chemin):
                 lignes_ignorees += 1
                 continue
 
-            # Parser les groupes de mouvements
+            # Parser les groupes de mouvements + marqueurs H/B
             groupes = []
-            for g in chaine.split(','):
+            marqueurs_quart = []  # Liste des H/B aux quarts
+            position_marqueurs = []  # Position du marqueur dans la sequence
+
+            elements = chaine.split(',')
+            idx_mouvement = 0
+            for g in elements:
                 g = g.strip()
                 if g and g[0] in ('U', 'D'):
                     groupes.append((g[0], len(g)))
+                    idx_mouvement += 1
+                elif g in ('H', 'B'):
+                    marqueurs_quart.append(g)
+                    position_marqueurs.append(idx_mouvement)
 
             if not groupes:
                 lignes_ignorees += 1
@@ -151,6 +160,8 @@ def parser_fichier(chemin):
                 'groupes': groupes,
                 'total_u': total_u,
                 'total_d': total_d,
+                'marqueurs': marqueurs_quart,
+                'positions_marqueurs': position_marqueurs,
             })
 
     return bougies, lignes_ignorees
@@ -206,10 +217,11 @@ def extraire_partiels(groupes, total_ticks, pct):
 # CALCUL DES INDICATEURS
 # ============================================================
 
-def calculer_indicateurs(p):
+def calculer_indicateurs(p, marqueurs=None):
     """
-    Calcule les 5 indicateurs a partir des donnees partielles.
+    Calcule les indicateurs a partir des donnees partielles.
     Retourne un dict avec chaque indicateur entre 0 et 1.
+    marqueurs = liste des H/B aux quarts (optionnel)
     """
     # 1. Ratio simple U/total
     ratio = p['u'] / p['ticks']
@@ -259,7 +271,7 @@ def calculer_indicateurs(p):
     else:
         ratio_moy = ratio
 
-    return {
+    result = {
         'ratio': ratio,
         'poids': ratio_poids,
         'max': ratio_max,
@@ -268,6 +280,37 @@ def calculer_indicateurs(p):
         'nb_runs': ratio_nb_runs,
         'moy_runs': ratio_moy,
     }
+
+    # 8. Score des marqueurs H/B (si disponibles)
+    # Compte le nombre de H vs B dans les marqueurs visibles
+    if marqueurs:
+        nb_h = sum(1 for m in marqueurs if m == 'H')
+        nb_b = sum(1 for m in marqueurs if m == 'B')
+        total_m = nb_h + nb_b
+        result['marqueurs'] = nb_h / total_m if total_m > 0 else 0.5
+
+        # 9. Tendance des marqueurs : les derniers marqueurs comptent plus
+        if total_m >= 2:
+            poids_m = 0
+            total_poids_m = 0
+            for i, m in enumerate(marqueurs):
+                w = i + 1  # Poids croissant
+                total_poids_m += w
+                if m == 'H':
+                    poids_m += w
+            result['tendance_marqueurs'] = poids_m / total_poids_m if total_poids_m > 0 else 0.5
+        else:
+            result['tendance_marqueurs'] = result['marqueurs']
+
+        # 10. Coherence marqueurs/mouvements : les marqueurs confirment-ils le ratio U/D ?
+        accord = abs(result['marqueurs'] - ratio)
+        result['coherence'] = 1.0 - accord  # 1.0 = parfaitement coherent, 0.0 = completement oppose
+    else:
+        result['marqueurs'] = 0.5
+        result['tendance_marqueurs'] = 0.5
+        result['coherence'] = 0.5
+
+    return result
 
 
 # ============================================================
@@ -293,10 +336,18 @@ def evaluer_poids(bougies, pct, poids_dict):
         if not p:
             continue
 
-        ind = calculer_indicateurs(p)
+        # Extraire les marqueurs visibles a ce % d'avancement
+        marqueurs_visibles = []
+        if b.get('marqueurs') and b.get('positions_marqueurs'):
+            nb_groupes_visibles = len(p['groupes_vus'])
+            for m_val, m_pos in zip(b['marqueurs'], b['positions_marqueurs']):
+                if m_pos <= nb_groupes_visibles:
+                    marqueurs_visibles.append(m_val)
 
-        # Score composite
-        score = sum(poids_dict[k] * ind[k] for k in poids_dict)
+        ind = calculer_indicateurs(p, marqueurs_visibles if marqueurs_visibles else None)
+
+        # Score composite (ignorer les cles absentes de ind)
+        score = sum(poids_dict[k] * ind.get(k, 0.5) for k in poids_dict)
 
         prediction = 'HAUSSE' if score > 0.5 else 'BAISSE'
         confiance = abs(score - 0.5) * 2
@@ -456,6 +507,9 @@ def generer_formule(meilleur_global, stats):
         'top3': 'Top 3 runs de chaque cote',
         'nb_runs': 'Nombre de runs U vs D',
         'moy_runs': 'Run moyen U vs D',
+        'marqueurs': 'Score marqueurs H/B aux quarts',
+        'tendance_marqueurs': 'Tendance marqueurs (poids croissant)',
+        'coherence': 'Coherence marqueurs/mouvements',
     }
 
     # Filtrer les poids > 0
@@ -553,6 +607,34 @@ def generer_formule(meilleur_global, stats):
         lignes.append("        ratio_moy = total_up / total")
         lignes.append("")
 
+    # Indicateur 8 : Score marqueurs H/B
+    if 'marqueurs' in poids_actifs:
+        lignes.append(f"    # Indicateur : {noms['marqueurs']} (poids {poids_actifs['marqueurs']})")
+        lignes.append("    # Note: les marqueurs H/B ne sont pas dans moves en live")
+        lignes.append("    # On utilise le ratio U/D comme proxy")
+        lignes.append("    score_marqueurs = total_up / total")
+        lignes.append("")
+
+    # Indicateur 9 : Tendance marqueurs
+    if 'tendance_marqueurs' in poids_actifs:
+        lignes.append(f"    # Indicateur : {noms['tendance_marqueurs']} (poids {poids_actifs['tendance_marqueurs']})")
+        lignes.append("    # Tendance recente ponderee")
+        lignes.append("    n_moves = len(moves)")
+        lignes.append("    if n_moves >= 2:")
+        lignes.append("        pw = sum((i+1) * len(m) for i, m in enumerate(moves) if m[0] == \"U\")")
+        lignes.append("        tw = sum((i+1) * len(m) for i, m in enumerate(moves))")
+        lignes.append("        tendance_m = pw / tw if tw > 0 else 0.5")
+        lignes.append("    else:")
+        lignes.append("        tendance_m = total_up / total")
+        lignes.append("")
+
+    # Indicateur 10 : Coherence
+    if 'coherence' in poids_actifs:
+        lignes.append(f"    # Indicateur : {noms['coherence']} (poids {poids_actifs['coherence']})")
+        lignes.append("    coherence_val = 1.0 - abs(total_up / total - 0.5) * 2")
+        lignes.append("    coherence_val = max(0, min(1, coherence_val))")
+        lignes.append("")
+
     # Score composite
     lignes.append("    # Score composite (poids optimises par brute force)")
     termes = []
@@ -564,6 +646,9 @@ def generer_formule(meilleur_global, stats):
         'top3': 'ratio_top3',
         'nb_runs': 'ratio_nb_runs',
         'moy_runs': 'ratio_moy',
+        'marqueurs': 'score_marqueurs',
+        'tendance_marqueurs': 'tendance_m',
+        'coherence': 'coherence_val',
     }
 
     for k, v in sorted(poids_actifs.items(), key=lambda x: -x[1]):
@@ -704,7 +789,7 @@ def main():
     # ============================================================
     afficher_titre("PHASE 1 : TEST DES INDICATEURS INDIVIDUELS")
 
-    indicateurs_noms = ['ratio', 'poids', 'max', 'momentum', 'top3', 'nb_runs', 'moy_runs']
+    indicateurs_noms = ['ratio', 'poids', 'max', 'momentum', 'top3', 'nb_runs', 'moy_runs', 'marqueurs', 'tendance_marqueurs', 'coherence']
     noms_lisibles = {
         'ratio': 'Ratio U/total',
         'poids': 'Poids runs (exp 1.5)',
@@ -713,6 +798,9 @@ def main():
         'top3': 'Top 3 runs',
         'nb_runs': 'Nb runs U vs D',
         'moy_runs': 'Run moyen U vs D',
+        'marqueurs': 'Score marqueurs H/B aux quarts',
+        'tendance_marqueurs': 'Tendance marqueurs (poids croissant)',
+        'coherence': 'Coherence marqueurs/mouvements',
     }
 
     meilleurs_individuels = {}

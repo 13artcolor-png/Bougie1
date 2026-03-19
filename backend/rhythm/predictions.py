@@ -37,15 +37,31 @@ def _get_conn() -> sqlite3.Connection:
             UNIQUE(symbol, timeframe, candle_time)
         )
     """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_predictions_lookup
+        ON predictions(symbol, timeframe, candle_time)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_predictions_stats
+        ON predictions(symbol, timeframe, actual_signature)
+    """)
     conn.commit()
     return conn
 
 
 def _sig_to_direction(signature: str) -> str:
     """Deduit la direction de depart a partir de la signature.
-    HAUT = monte d'abord (Vi, IMP+)
-    BAS = descend d'abord (V, IMP-)
-    NEUTRE = range (RNG)"""
+    Supporte les 2 formats :
+    - Ancien : Vi-debut, IMP+, V-fin, RNG
+    - Nouveau : DUUD, UDDU, UUDD (sequence de 4 directions)
+    """
+    # Nouveau format (4 caracteres U/D)
+    if len(signature) == 4 and all(c in "UD" for c in signature):
+        if signature[0] == "U":
+            return "HAUT"
+        else:
+            return "BAS"
+    # Ancien format
     if signature.startswith("Vi") or signature.startswith("IMP+"):
         return "HAUT"
     elif signature.startswith("V-") or signature.startswith("IMP-"):
@@ -54,7 +70,13 @@ def _sig_to_direction(signature: str) -> str:
 
 
 def _sig_to_category(signature: str) -> str:
-    """Extrait la categorie de la signature (V, Vi, IMP+, IMP-, RNG)."""
+    """Extrait la categorie de la signature.
+    Supporte les 2 formats :
+    - Ancien : V-debut -> V
+    - Nouveau : DUUD -> premiere moitie (DU)
+    """
+    if len(signature) == 4 and all(c in "UD" for c in signature):
+        return signature[:2]  # Premiere moitie comme categorie
     return signature.split("-")[0] if "-" in signature else signature
 
 

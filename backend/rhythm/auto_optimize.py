@@ -44,9 +44,26 @@ def _export_from_db(symbol: str, timeframe: str) -> str:
         for r in rows:
             dt = datetime.fromtimestamp(r["candle_time"])
             date_str = dt.strftime("%Y-%m-%d %H:%M")
-            cloture = "HAUSSE" if r["closed_bullish"] else "BAISSE"
+            bullish = r["closed_bullish"]
+            cloture = "HAUSSE" if bullish else "BAISSE"
             moves = r["moves"]
-            f.write(f"{date_str} | {cloture} | {moves}\n")
+            move_list = moves.split(",")
+
+            # Inserer H ou B aux quarts
+            enriched = []
+            for i, m in enumerate(move_list):
+                enriched.append(m)
+                position = (i + 1) / len(move_list)
+                for q_pct in [0.25, 0.50, 0.75]:
+                    prev_pos = i / len(move_list)
+                    if prev_pos < q_pct <= position:
+                        partial = move_list[:i + 1]
+                        partial_u = sum(len(m2) for m2 in partial if m2 and m2[0] == "U")
+                        partial_d = sum(len(m2) for m2 in partial if m2 and m2[0] == "D")
+                        enriched.append("H" if partial_u >= partial_d else "B")
+            enriched.append("H" if bullish else "B")
+
+            f.write(f"{date_str} | {cloture} | {','.join(enriched)}\n")
 
     return tmp_path
 
@@ -77,7 +94,7 @@ def optimize_formula(symbol: str, timeframe: str = "M15") -> dict:
         return {"success": False, "error": f"Pas assez de donnees ({len(bougies)} bougies, min 50)"}
 
     # Etape 3 : Phase 1 - Test des indicateurs individuels
-    indicateurs_noms = ['ratio', 'poids', 'max', 'momentum', 'top3', 'nb_runs', 'moy_runs']
+    indicateurs_noms = ['ratio', 'poids', 'max', 'momentum', 'top3', 'nb_runs', 'moy_runs', 'marqueurs', 'tendance_marqueurs', 'coherence']
     meilleurs_individuels = {}
 
     for pct in [20, 25, 30]:

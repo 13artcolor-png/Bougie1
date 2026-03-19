@@ -193,9 +193,10 @@ async def export_history(symbol: str, timeframe: str):
     lines.append(f"# Historique {symbol} {timeframe} - {len(rows)} bougies")
     lines.append(f"# Format standard pour l'outil de formule")
     lines.append(f"# Heures en heure de Paris (UTC+2 ete / UTC+1 hiver)")
-    lines.append(f"# Q1-Q4 = direction du prix a chaque quart (HAUSSE/BAISSE)")
+    lines.append(f"# Format : mouvements U/D avec marqueurs H/B aux quarts (25%, 50%, 75%, 100%)")
+    lines.append(f"# H = prix au-dessus de l'open a ce quart, B = en-dessous")
     lines.append(f"#")
-    lines.append("Date | Cloture | Mouvements | Q1_dir | Q2_dir | Q3_dir | Q4_dir | Nb_U | Nb_D | Nb_moves")
+    lines.append("Date | Cloture | Mouvements")
 
     from datetime import datetime, timedelta
     for r in rows:
@@ -206,20 +207,28 @@ async def export_history(symbol: str, timeframe: str):
         cloture = "HAUSSE" if bullish else "BAISSE"
         moves = r["moves"]
         move_list = moves.split(",")
-        nb_u = sum(len(m) for m in move_list if m and m[0] == "U")
-        nb_d = sum(len(m) for m in move_list if m and m[0] == "D")
-        nb_moves = len(move_list)
 
-        # Direction par quart : calculer le bilan U/D a chaque quart des mouvements
-        q_dirs = []
-        for q in range(1, 5):
-            cut = max(1, int(len(move_list) * q / 4))
-            partial = move_list[:cut]
-            partial_u = sum(len(m) for m in partial if m and m[0] == "U")
-            partial_d = sum(len(m) for m in partial if m and m[0] == "D")
-            q_dirs.append("HAUSSE" if partial_u >= partial_d else "BAISSE")
+        # Inserer H ou B aux quarts (25%, 50%, 75%, 100%)
+        # Calculer le bilan U/D a chaque quart
+        enriched = []
+        for i, m in enumerate(move_list):
+            enriched.append(m)
+            # Verifier si on est a un quart
+            position = (i + 1) / len(move_list)
+            for q_pct in [0.25, 0.50, 0.75]:
+                # Inserer le marqueur au mouvement le plus proche du quart
+                prev_pos = i / len(move_list)
+                if prev_pos < q_pct <= position:
+                    partial = move_list[:i + 1]
+                    partial_u = sum(len(m2) for m2 in partial if m2 and m2[0] == "U")
+                    partial_d = sum(len(m2) for m2 in partial if m2 and m2[0] == "D")
+                    enriched.append("H" if partial_u >= partial_d else "B")
 
-        lines.append(f"{date_str} | {cloture} | {moves} | {q_dirs[0]} | {q_dirs[1]} | {q_dirs[2]} | {q_dirs[3]} | {nb_u} | {nb_d} | {nb_moves}")
+        # Marqueur final (Q4 = resultat)
+        enriched.append("H" if bullish else "B")
+
+        moves_enriched = ",".join(enriched)
+        lines.append(f"{date_str} | {cloture} | {moves_enriched}")
 
     return {"content": "\n".join(lines), "filename": f"{symbol}_{timeframe}_export.txt", "count": len(rows)}
 
