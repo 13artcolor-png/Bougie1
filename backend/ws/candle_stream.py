@@ -259,36 +259,21 @@ async def candle_websocket(websocket: WebSocket):
                     if micro_prediction.get("prediction"):
                         micro_prediction["current_moves"] = grid_moves
 
-                    # --- Systeme de prediction (2 niveaux) ---
-                    # 1. DICTIONNAIRE DE PATTERNS (prioritaire) : se souvient des patterns passes
-                    # 2. FORMULE ALGORITHMIQUE (fallback) : calcul mathematique si dictionnaire insuffisant
-
-                    # Niveau 1 : dictionnaire
-                    dict_prediction = await asyncio.to_thread(
-                        pattern_predict_close, symbol, timeframe, grid_moves, candle_progress
-                    )
-
-                    # Niveau 2 : formule (fallback)
+                    # --- Systeme de prediction : FORMULE uniquement ---
+                    # Le dictionnaire de patterns est en developpement (desactive pour l'instant)
                     prev_c = last_closed["close"] if last_closed else current_candle["open"]
-                    formula_prediction = await asyncio.to_thread(
+                    close_prediction = await asyncio.to_thread(
                         execute_formula,
                         grid_moves, candle_progress,
                         current_candle["open"], current_candle["high"],
                         current_candle["low"], current_candle["close"],
                         prev_c
                     )
-
-                    # Selection : dictionnaire si >= 20 echantillons, sinon formule
-                    if dict_prediction and dict_prediction.get("prediction") and dict_prediction.get("total_samples", 0) >= 20:
-                        close_prediction = dict_prediction
-                        close_prediction["source"] = "dictionnaire"
-                    elif formula_prediction and formula_prediction.get("prediction"):
-                        close_prediction = formula_prediction
+                    if close_prediction:
                         close_prediction["source"] = "formule"
+                        close_prediction["current_moves"] = grid_moves
                     else:
                         close_prediction = {"prediction": None, "source": "aucun"}
-
-                    close_prediction["current_moves"] = grid_moves
                     # Garder la derniere prediction pour la verifier a la cloture
                     if close_prediction and close_prediction.get("prediction"):
                         last_close_prediction = close_prediction
