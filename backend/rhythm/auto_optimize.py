@@ -94,7 +94,7 @@ def optimize_formula(symbol: str, timeframe: str = "M15") -> dict:
         return {"success": False, "error": f"Pas assez de donnees ({len(bougies)} bougies, min 50)"}
 
     # Etape 3 : Phase 1 - Test des indicateurs individuels
-    indicateurs_noms = ['ratio', 'poids', 'max', 'momentum', 'top3', 'nb_runs', 'moy_runs', 'marqueurs', 'tendance_marqueurs', 'coherence']
+    indicateurs_noms = ['ratio', 'poids', 'max', 'momentum', 'top3', 'nb_runs', 'moy_runs', 'dna_force', 'dna_dir_forte', 'dna_dernier_fort', 'dna_acceleration', 'dna_fin']
     meilleurs_individuels = {}
 
     for pct in [20, 25, 30]:

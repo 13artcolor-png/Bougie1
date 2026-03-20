@@ -310,6 +310,59 @@ def calculer_indicateurs(p, marqueurs=None):
         result['tendance_marqueurs'] = 0.5
         result['coherence'] = 0.5
 
+    # --- INDICATEURS ADN ---
+    # Convertir les mouvements en categories P/M/G/T
+    groupes = p['groupes_vus']
+
+    def _amp_cat(length):
+        if length <= 3: return "P"
+        elif length <= 8: return "M"
+        elif length <= 15: return "G"
+        else: return "T"
+
+    dna = [f"{d}{_amp_cat(l)}" for d, l in groupes]
+
+    if len(dna) >= 3:
+        # 11. Ratio de categories fortes (G+T) vs faibles (P+M)
+        nb_fort = sum(1 for d in dna if d[1] in ("G", "T"))
+        nb_faible = sum(1 for d in dna if d[1] in ("P", "M"))
+        total_dna = nb_fort + nb_faible
+        result['dna_force'] = nb_fort / total_dna if total_dna > 0 else 0.5
+
+        # 12. Direction des mouvements forts (G+T seulement)
+        forts_u = sum(1 for d in dna if d[0] == "U" and d[1] in ("G", "T"))
+        forts_d = sum(1 for d in dna if d[0] == "D" and d[1] in ("G", "T"))
+        total_forts = forts_u + forts_d
+        result['dna_dir_forte'] = forts_u / total_forts if total_forts > 0 else 0.5
+
+        # 13. Dernier mouvement fort : direction du dernier G ou T
+        derniers_forts = [d for d in dna if d[1] in ("G", "T")]
+        if derniers_forts:
+            result['dna_dernier_fort'] = 1.0 if derniers_forts[-1][0] == "U" else 0.0
+        else:
+            result['dna_dernier_fort'] = 0.5
+
+        # 14. Acceleration : les mouvements recents sont-ils plus grands ?
+        moitie = len(dna) // 2
+        if moitie >= 2:
+            taille_debut = sum(l for _, l in groupes[:moitie])
+            taille_fin = sum(l for _, l in groupes[moitie:])
+            total_taille = taille_debut + taille_fin
+            result['dna_acceleration'] = taille_fin / total_taille if total_taille > 0 else 0.5
+        else:
+            result['dna_acceleration'] = 0.5
+
+        # 15. Sequence de fin : les 3 derniers mouvements sont-ils U ou D ?
+        fin_3 = dna[-3:] if len(dna) >= 3 else dna
+        fin_u = sum(1 for d in fin_3 if d[0] == "U")
+        result['dna_fin'] = fin_u / len(fin_3) if fin_3 else 0.5
+    else:
+        result['dna_force'] = 0.5
+        result['dna_dir_forte'] = 0.5
+        result['dna_dernier_fort'] = 0.5
+        result['dna_acceleration'] = 0.5
+        result['dna_fin'] = 0.5
+
     return result
 
 
@@ -510,6 +563,11 @@ def generer_formule(meilleur_global, stats):
         'marqueurs': 'Score marqueurs H/B aux quarts',
         'tendance_marqueurs': 'Tendance marqueurs (poids croissant)',
         'coherence': 'Coherence marqueurs/mouvements',
+        'dna_force': 'ADN ratio mouvements forts (G+T)',
+        'dna_dir_forte': 'ADN direction des mouvements forts',
+        'dna_dernier_fort': 'ADN dernier mouvement fort',
+        'dna_acceleration': 'ADN acceleration (fin vs debut)',
+        'dna_fin': 'ADN direction des 3 derniers',
     }
 
     # Filtrer les poids > 0
@@ -635,6 +693,54 @@ def generer_formule(meilleur_global, stats):
         lignes.append("    coherence_val = max(0, min(1, coherence_val))")
         lignes.append("")
 
+    # Indicateurs ADN
+    if 'dna_force' in poids_actifs:
+        lignes.append(f"    # Indicateur : ADN ratio mouvements forts (poids {poids_actifs['dna_force']})")
+        lignes.append("    dna_cats = []")
+        lignes.append("    for m in moves:")
+        lignes.append("        if m[0] in ('U','D'):")
+        lignes.append("            l = len(m)")
+        lignes.append("            c = 'P' if l <= 3 else 'M' if l <= 8 else 'G' if l <= 15 else 'T'")
+        lignes.append("            dna_cats.append((m[0], c))")
+        lignes.append("    nb_fort = sum(1 for _,c in dna_cats if c in ('G','T'))")
+        lignes.append("    dna_force = nb_fort / len(dna_cats) if dna_cats else 0.5")
+        lignes.append("")
+
+    if 'dna_dir_forte' in poids_actifs:
+        lignes.append(f"    # Indicateur : ADN direction mouvements forts (poids {poids_actifs['dna_dir_forte']})")
+        lignes.append("    if 'dna_cats' not in dir():")
+        lignes.append("        dna_cats = [(m[0], 'P' if len(m)<=3 else 'M' if len(m)<=8 else 'G' if len(m)<=15 else 'T') for m in moves if m[0] in ('U','D')]")
+        lignes.append("    forts_u = sum(1 for d,c in dna_cats if d=='U' and c in ('G','T'))")
+        lignes.append("    forts_d = sum(1 for d,c in dna_cats if d=='D' and c in ('G','T'))")
+        lignes.append("    tf = forts_u + forts_d")
+        lignes.append("    dna_dir_forte = forts_u / tf if tf > 0 else 0.5")
+        lignes.append("")
+
+    if 'dna_dernier_fort' in poids_actifs:
+        lignes.append(f"    # Indicateur : ADN dernier mouvement fort (poids {poids_actifs['dna_dernier_fort']})")
+        lignes.append("    if 'dna_cats' not in dir():")
+        lignes.append("        dna_cats = [(m[0], 'P' if len(m)<=3 else 'M' if len(m)<=8 else 'G' if len(m)<=15 else 'T') for m in moves if m[0] in ('U','D')]")
+        lignes.append("    derniers_f = [d for d,c in dna_cats if c in ('G','T')]")
+        lignes.append("    dna_dernier_fort = 1.0 if derniers_f and derniers_f[-1] == 'U' else 0.0 if derniers_f else 0.5")
+        lignes.append("")
+
+    if 'dna_acceleration' in poids_actifs:
+        lignes.append(f"    # Indicateur : ADN acceleration (poids {poids_actifs['dna_acceleration']})")
+        lignes.append("    moitie_idx = len(moves) // 2")
+        lignes.append("    if moitie_idx >= 2:")
+        lignes.append("        t_debut = sum(len(m) for m in moves[:moitie_idx] if m[0] in ('U','D'))")
+        lignes.append("        t_fin = sum(len(m) for m in moves[moitie_idx:] if m[0] in ('U','D'))")
+        lignes.append("        dna_acceleration = t_fin / (t_debut + t_fin) if (t_debut + t_fin) > 0 else 0.5")
+        lignes.append("    else:")
+        lignes.append("        dna_acceleration = 0.5")
+        lignes.append("")
+
+    if 'dna_fin' in poids_actifs:
+        lignes.append(f"    # Indicateur : ADN direction des 3 derniers (poids {poids_actifs['dna_fin']})")
+        lignes.append("    fin3 = [m for m in moves if m[0] in ('U','D')][-3:]")
+        lignes.append("    dna_fin = sum(1 for m in fin3 if m[0] == 'U') / len(fin3) if fin3 else 0.5")
+        lignes.append("")
+
     # Score composite
     lignes.append("    # Score composite (poids optimises par brute force)")
     termes = []
@@ -649,6 +755,11 @@ def generer_formule(meilleur_global, stats):
         'marqueurs': 'score_marqueurs',
         'tendance_marqueurs': 'tendance_m',
         'coherence': 'coherence_val',
+        'dna_force': 'dna_force',
+        'dna_dir_forte': 'dna_dir_forte',
+        'dna_dernier_fort': 'dna_dernier_fort',
+        'dna_acceleration': 'dna_acceleration',
+        'dna_fin': 'dna_fin',
     }
 
     for k, v in sorted(poids_actifs.items(), key=lambda x: -x[1]):
@@ -789,7 +900,7 @@ def main():
     # ============================================================
     afficher_titre("PHASE 1 : TEST DES INDICATEURS INDIVIDUELS")
 
-    indicateurs_noms = ['ratio', 'poids', 'max', 'momentum', 'top3', 'nb_runs', 'moy_runs', 'marqueurs', 'tendance_marqueurs', 'coherence']
+    indicateurs_noms = ['ratio', 'poids', 'max', 'momentum', 'top3', 'nb_runs', 'moy_runs', 'marqueurs', 'tendance_marqueurs', 'coherence', 'dna_force', 'dna_dir_forte', 'dna_dernier_fort', 'dna_acceleration', 'dna_fin']
     noms_lisibles = {
         'ratio': 'Ratio U/total',
         'poids': 'Poids runs (exp 1.5)',
@@ -801,6 +912,11 @@ def main():
         'marqueurs': 'Score marqueurs H/B aux quarts',
         'tendance_marqueurs': 'Tendance marqueurs (poids croissant)',
         'coherence': 'Coherence marqueurs/mouvements',
+        'dna_force': 'ADN ratio mouvements forts (G+T)',
+        'dna_dir_forte': 'ADN direction des mouvements forts',
+        'dna_dernier_fort': 'ADN dernier mouvement fort',
+        'dna_acceleration': 'ADN acceleration (fin vs debut)',
+        'dna_fin': 'ADN direction des 3 derniers',
     }
 
     meilleurs_individuels = {}

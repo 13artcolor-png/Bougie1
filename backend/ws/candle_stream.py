@@ -18,6 +18,7 @@ from rhythm.next_quarter_formula import predict_next_quarter
 from rhythm.auto_backfill import auto_backfill
 from rhythm.auto_optimize import optimize_formula
 from rhythm.pattern_memory import learn_from_candle, predict_close as pattern_predict_close, backfill_patterns
+from rhythm.pattern_dna import learn_candle as dna_learn, predict_close as dna_predict_close, backfill_dna
 
 logger = get_logger("ws.candle_stream")
 
@@ -63,6 +64,7 @@ async def candle_websocket(websocket: WebSocket):
                     # Backfill automatique en arriere-plan
                     asyncio.create_task(asyncio.to_thread(auto_backfill, symbol, timeframe))
                     asyncio.create_task(asyncio.to_thread(backfill_patterns, symbol, timeframe))
+                    asyncio.create_task(asyncio.to_thread(backfill_dna, symbol, timeframe))
                 if "timeframe" in data:
                     timeframe = data["timeframe"]
                     last_classified_time = 0
@@ -145,11 +147,14 @@ async def candle_websocket(websocket: WebSocket):
                     current_candle_time_for_quarters = 0
                     quarter_prices = {}
 
-                    # Apprendre cette bougie dans le dictionnaire de patterns
+                    # Apprendre cette bougie dans les dictionnaires
                     if grid_moves and len(grid_moves) >= 3:
                         actual_close = "HAUSSE" if last_closed["close"] > last_closed["open"] else "BAISSE"
                         await asyncio.to_thread(
                             learn_from_candle, symbol, timeframe, grid_moves, actual_close
+                        )
+                        await asyncio.to_thread(
+                            dna_learn, symbol, timeframe, grid_moves, actual_close
                         )
 
                     # Auto-optimisation toutes les 100 bougies
@@ -259,21 +264,39 @@ async def candle_websocket(websocket: WebSocket):
                     if micro_prediction.get("prediction"):
                         micro_prediction["current_moves"] = grid_moves
 
-                    # --- Systeme de prediction : FORMULE uniquement ---
-                    # Le dictionnaire de patterns est en developpement (desactive pour l'instant)
+                    # --- Systeme de prediction : FORMULE + ADN en parallele ---
                     prev_c = last_closed["close"] if last_closed else current_candle["open"]
-                    close_prediction = await asyncio.to_thread(
+
+                    # Formule algorithmique
+                    formula_pred = await asyncio.to_thread(
                         execute_formula,
                         grid_moves, candle_progress,
                         current_candle["open"], current_candle["high"],
                         current_candle["low"], current_candle["close"],
                         prev_c
                     )
-                    if close_prediction:
+
+                    # Dictionnaire ADN
+                    dna_pred = await asyncio.to_thread(
+                        dna_predict_close, symbol, timeframe, grid_moves
+                    )
+
+                    # La formule reste la prediction principale pour le WR
+                    if formula_pred and formula_pred.get("prediction"):
+                        close_prediction = formula_pred
                         close_prediction["source"] = "formule"
-                        close_prediction["current_moves"] = grid_moves
                     else:
                         close_prediction = {"prediction": None, "source": "aucun"}
+
+                    close_prediction["current_moves"] = grid_moves
+
+                    # Ajouter la prediction ADN en complement (pour comparaison)
+                    if dna_pred and dna_pred.get("prediction"):
+                        close_prediction["dna_prediction"] = dna_pred.get("prediction")
+                        close_prediction["dna_pct_hausse"] = dna_pred.get("pct_hausse", 50)
+                        close_prediction["dna_pct_baisse"] = dna_pred.get("pct_baisse", 50)
+                        close_prediction["dna_pattern"] = dna_pred.get("best_pattern", "")
+                        close_prediction["dna_samples"] = dna_pred.get("total_samples", 0)
                     # Garder la derniere prediction pour la verifier a la cloture
                     if close_prediction and close_prediction.get("prediction"):
                         last_close_prediction = close_prediction
