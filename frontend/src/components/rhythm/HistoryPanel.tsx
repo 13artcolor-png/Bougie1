@@ -13,13 +13,14 @@ interface HistoryPanelProps {
 }
 
 function formatTime(timestamp: number): string {
-  // Timestamp en broker time (UTC+3), convertir en Paris (UTC+1 hiver / UTC+2 ete)
-  // On soustrait 1h pour passer de UTC+3 a UTC+2 (heure d'ete Paris)
-  const parisTimestamp = timestamp - 3600;
-  const d = new Date(parisTimestamp * 1000);
+  // Timestamp en broker time (UTC+3)
+  // Soustraire 3h pour revenir en UTC, puis JavaScript convertit en heure locale Paris
+  const utcTimestamp = timestamp - (3 * 3600);
+  const d = new Date(utcTimestamp * 1000);
   return d.toLocaleString("fr-FR", {
     day: "2-digit", month: "2-digit",
     hour: "2-digit", minute: "2-digit",
+    timeZone: "Europe/Paris",
   });
 }
 

@@ -21,8 +21,9 @@ logger = get_logger("rhythm.custom_formula")
 
 FORMULA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "custom_formula.py")
 
-# Formule par defaut
-DEFAULT_FORMULA = '''# Formule de prediction de cloture
+# Formule par defaut (fallback si data/custom_formula.py n'existe pas)
+# La vraie formule est dans data/custom_formula.py (modifiable via l'editeur)
+DEFAULT_FORMULA = '''# Formule de prediction de cloture - DEFAUT
 # Variables disponibles :
 #   moves: list[str] - mouvements de grille (ex: ["DDD", "UU", "DDDDD"])
 #   progress: float - progression (0.0 a 1.0)

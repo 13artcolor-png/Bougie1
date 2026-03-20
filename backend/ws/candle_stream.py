@@ -17,8 +17,7 @@ from rhythm.close_tracker import save_close_result, get_close_stats, save_quarte
 from rhythm.next_quarter_formula import predict_next_quarter
 from rhythm.auto_backfill import auto_backfill
 from rhythm.auto_optimize import optimize_formula
-from rhythm.pattern_memory import learn_from_candle, predict_close as pattern_predict_close, backfill_patterns
-from rhythm.pattern_dna import learn_candle as dna_learn, predict_close as dna_predict_close, backfill_dna
+from rhythm.pattern_memory import learn_from_candle, backfill_patterns
 
 logger = get_logger("ws.candle_stream")
 
@@ -64,7 +63,6 @@ async def candle_websocket(websocket: WebSocket):
                     # Backfill automatique en arriere-plan
                     asyncio.create_task(asyncio.to_thread(auto_backfill, symbol, timeframe))
                     asyncio.create_task(asyncio.to_thread(backfill_patterns, symbol, timeframe))
-                    asyncio.create_task(asyncio.to_thread(backfill_dna, symbol, timeframe))
                 if "timeframe" in data:
                     timeframe = data["timeframe"]
                     last_classified_time = 0
@@ -152,9 +150,6 @@ async def candle_websocket(websocket: WebSocket):
                         actual_close = "HAUSSE" if last_closed["close"] > last_closed["open"] else "BAISSE"
                         await asyncio.to_thread(
                             learn_from_candle, symbol, timeframe, grid_moves, actual_close
-                        )
-                        await asyncio.to_thread(
-                            dna_learn, symbol, timeframe, grid_moves, actual_close
                         )
 
                     # Auto-optimisation toutes les 100 bougies

@@ -1,17 +1,15 @@
 """Systeme de micro-mouvements base sur les franchissements de lignes de grille.
 
-La grille a 4 lignes (1=haut, 2, 3, 4=bas).
+La grille a 32 lignes (1=haut, 32=bas). Chaque ligne = 3.125% du range.
 A chaque fois que le prix change de ligne, on enregistre le mouvement :
-- D = descend d'une ligne
-- DD = descend de 2 lignes
-- DDD = descend de 3 lignes
-- U = monte d'une ligne
-- UU = monte de 2 lignes
-- UUU = monte de 3 lignes
-- R = reste sur la meme ligne (apres un certain temps sans bouger)
+- D = descend d'une ligne, DD = 2 lignes, DDD = 3, etc.
+- U = monte d'une ligne, UU = 2 lignes, UUU = 3, etc.
+
+Les mouvements continus dans la meme direction sont regroupes :
+  ex: si le prix descend de la ligne 5 a la ligne 12 = DDDDDDD (7 lignes)
 
 La sequence de mouvements forme le "rythme" de la bougie.
-On utilise les n-grams de ces mouvements pour predire le suivant.
+Environ 28 mouvements par bougie M15 en moyenne.
 """
 
 import sqlite3
@@ -30,7 +28,7 @@ def _get_conn() -> sqlite3.Connection:
 
 
 def _price_to_row(price: float, low: float, high: float) -> int:
-    """Convertit un prix en ligne (1-32). 1 = haut, 32 = bas."""
+    """Convertit un prix en ligne de la grille 32 niveaux. 1 = haut, 32 = bas."""
     if high == low:
         return 16
     ratio = (price - low) / (high - low)  # 0 = bas, 1 = haut

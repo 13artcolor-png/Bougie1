@@ -196,11 +196,13 @@ async def export_history(symbol: str, timeframe: str):
     lines.append(f"#")
     lines.append("Date | Cloture | Mouvements")
 
-    from datetime import datetime, timedelta
-    from config import BROKER_UTC_OFFSET, PARIS_UTC_OFFSET
+    from datetime import datetime, timedelta, timezone
+    from config import BROKER_UTC_OFFSET
     for r in rows:
-        dt = datetime.fromtimestamp(r["candle_time"]) - timedelta(hours=BROKER_UTC_OFFSET - PARIS_UTC_OFFSET)
-        date_str = dt.strftime("%Y-%m-%d %H:%M")
+        # Broker time -> UTC -> formater
+        utc_ts = r["candle_time"] - (BROKER_UTC_OFFSET * 3600)
+        dt = datetime.fromtimestamp(utc_ts, tz=timezone.utc)
+        date_str = dt.strftime("%Y-%m-%d %H:%M UTC")
         cloture = "HAUSSE" if r["closed_bullish"] else "BAISSE"
         lines.append(f"{date_str} | {cloture} | {r['moves']}")
 

@@ -1,8 +1,8 @@
 # Formule de prediction de cloture
-# Generee le 20/03/2026 13:19
-# Basee sur 6836 bougies
-# Precision globale : 74.5%
-# Haute confiance : 90.7% (sur 31.6% des cas)
+# Generee le 19/03/2026 11:16
+# Basee sur 6674 bougies
+# Precision globale : 74.6%
+# Haute confiance : 91.3% (sur 28.5% des cas)
 # Meilleur a 50% d'avancement
 #
 # Variables disponibles :
@@ -20,17 +20,21 @@ total = total_up + total_down
 if total < 3:
     result = {"pct_hausse": 50.0, "pct_baisse": 50.0}
 else:
-    # Indicateur : Ratio simple U/total (poids 0.89)
+    # Indicateur : Ratio simple U/total (poids 0.8)
     ratio = total_up / total
 
-    # Indicateur : Poids des runs (exposant 1.5) (poids 0.11)
-    poids_u = sum(len(m) ** 1.5 for m in moves if m[0] == "U")
-    poids_d = sum(len(m) ** 1.5 for m in moves if m[0] == "D")
-    tp = poids_u + poids_d
-    ratio_poids = poids_u / tp if tp > 0 else 0.5
+    # Indicateur : Run moyen U vs D (poids 0.2)
+    lens_u = [len(m) for m in moves if m[0] == "U"]
+    lens_d = [len(m) for m in moves if m[0] == "D"]
+    if lens_u and lens_d:
+        moy_u = sum(lens_u) / len(lens_u)
+        moy_d = sum(lens_d) / len(lens_d)
+        ratio_moy = moy_u / (moy_u + moy_d)
+    else:
+        ratio_moy = total_up / total
 
     # Score composite (poids optimises par brute force)
-    score = 0.89 * ratio + 0.11 * ratio_poids
+    score = 0.8 * ratio + 0.2 * ratio_moy
 
     # Conversion en pourcentage avec amplitude selon progression
     amplitude = 30 + progress * 20

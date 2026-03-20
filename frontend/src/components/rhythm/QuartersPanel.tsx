@@ -20,12 +20,13 @@ interface QuartersPanelProps {
 }
 
 function formatTime(timestamp: number): string {
-  // Timestamp en broker time (UTC+3), convertir en Paris (UTC+2 ete)
-  const parisTimestamp = timestamp - 3600;
-  const d = new Date(parisTimestamp * 1000);
+  // Timestamp en broker time (UTC+3) -> UTC -> heure locale Paris
+  const utcTimestamp = timestamp - (3 * 3600);
+  const d = new Date(utcTimestamp * 1000);
   return d.toLocaleString("fr-FR", {
     day: "2-digit", month: "2-digit",
     hour: "2-digit", minute: "2-digit",
+    timeZone: "Europe/Paris",
   });
 }
 
