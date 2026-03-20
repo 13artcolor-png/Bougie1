@@ -193,43 +193,16 @@ async def export_history(symbol: str, timeframe: str):
     lines.append(f"# Historique {symbol} {timeframe} - {len(rows)} bougies")
     lines.append(f"# Format standard pour l'outil de formule")
     lines.append(f"# Heures en heure de Paris (UTC+2 ete / UTC+1 hiver)")
-    lines.append(f"# Format : mouvements U/D avec marqueurs H/B aux quarts (25%, 50%, 75%, 100%)")
-    lines.append(f"# H = prix au-dessus de l'open a ce quart, B = en-dessous")
     lines.append(f"#")
     lines.append("Date | Cloture | Mouvements")
 
     from datetime import datetime, timedelta
+    from config import BROKER_UTC_OFFSET, PARIS_UTC_OFFSET
     for r in rows:
-        # Broker time -> Paris (difference = BROKER_UTC_OFFSET - PARIS_UTC_OFFSET)
-        from config import BROKER_UTC_OFFSET, PARIS_UTC_OFFSET
         dt = datetime.fromtimestamp(r["candle_time"]) - timedelta(hours=BROKER_UTC_OFFSET - PARIS_UTC_OFFSET)
         date_str = dt.strftime("%Y-%m-%d %H:%M")
-        bullish = r["closed_bullish"]
-        cloture = "HAUSSE" if bullish else "BAISSE"
-        moves = r["moves"]
-        move_list = moves.split(",")
-
-        # Inserer H ou B aux quarts (25%, 50%, 75%, 100%)
-        # Calculer le bilan U/D a chaque quart
-        enriched = []
-        for i, m in enumerate(move_list):
-            enriched.append(m)
-            # Verifier si on est a un quart
-            position = (i + 1) / len(move_list)
-            for q_pct in [0.25, 0.50, 0.75]:
-                # Inserer le marqueur au mouvement le plus proche du quart
-                prev_pos = i / len(move_list)
-                if prev_pos < q_pct <= position:
-                    partial = move_list[:i + 1]
-                    partial_u = sum(len(m2) for m2 in partial if m2 and m2[0] == "U")
-                    partial_d = sum(len(m2) for m2 in partial if m2 and m2[0] == "D")
-                    enriched.append("H" if partial_u >= partial_d else "B")
-
-        # Marqueur final (Q4 = resultat)
-        enriched.append("H" if bullish else "B")
-
-        moves_enriched = ",".join(enriched)
-        lines.append(f"{date_str} | {cloture} | {moves_enriched}")
+        cloture = "HAUSSE" if r["closed_bullish"] else "BAISSE"
+        lines.append(f"{date_str} | {cloture} | {r['moves']}")
 
     return {"content": "\n".join(lines), "filename": f"{symbol}_{timeframe}_export.txt", "count": len(rows)}
 

@@ -42,31 +42,11 @@ export default function HistoryPanel({ visible, onClose }: HistoryPanelProps) {
   }, [visible, limit]);
 
   const exportText = () => {
-    let text = "# Format unifie avec marqueurs H/B aux quarts\n";
-    text += "# H = prix au-dessus de l'open, B = en-dessous\n";
-    text += "#\n";
-    text += "Date | Cloture | Mouvements\n";
+    let text = "Date | Cloture | Mouvements\n";
     for (const e of entries) {
       const time = formatTime(e.candle_time);
       const color = e.closed_bullish ? "HAUSSE" : "BAISSE";
-      // Inserer H/B aux quarts
-      const moveList = e.moves.split(",");
-      const enriched: string[] = [];
-      for (let idx = 0; idx < moveList.length; idx++) {
-        enriched.push(moveList[idx].trim());
-        const pos = (idx + 1) / moveList.length;
-        for (const qPct of [0.25, 0.50, 0.75]) {
-          const prevPos = idx / moveList.length;
-          if (prevPos < qPct && qPct <= pos) {
-            const partial = moveList.slice(0, idx + 1);
-            const pU = partial.reduce((s, m) => s + (m.trim()[0] === "U" ? m.trim().length : 0), 0);
-            const pD = partial.reduce((s, m) => s + (m.trim()[0] === "D" ? m.trim().length : 0), 0);
-            enriched.push(pU >= pD ? "H" : "B");
-          }
-        }
-      }
-      enriched.push(e.closed_bullish ? "H" : "B");
-      text += `${time} | ${color} | ${enriched.join(",")}\n`;
+      text += `${time} | ${color} | ${e.moves}\n`;
     }
 
     // Telecharger en fichier texte
@@ -150,38 +130,15 @@ export default function HistoryPanel({ visible, onClose }: HistoryPanelProps) {
                     </td>
                     <td className="py-1 text-center text-[#555]">{e.move_count}</td>
                     <td className="py-1 font-mono text-[12px]">
-                      {(() => {
-                        // Inserer H/B aux quarts
-                        const moveList = e.moves.split(",");
-                        const enriched: Array<{ val: string; type: string }> = [];
-                        for (let idx = 0; idx < moveList.length; idx++) {
-                          const m = moveList[idx].trim();
-                          enriched.push({ val: m, type: m[0] === "U" ? "U" : m[0] === "D" ? "D" : "R" });
-                          const pos = (idx + 1) / moveList.length;
-                          for (const qPct of [0.25, 0.50, 0.75]) {
-                            const prevPos = idx / moveList.length;
-                            if (prevPos < qPct && qPct <= pos) {
-                              const partial = moveList.slice(0, idx + 1);
-                              const pU = partial.reduce((s, m2) => s + (m2.trim()[0] === "U" ? m2.trim().length : 0), 0);
-                              const pD = partial.reduce((s, m2) => s + (m2.trim()[0] === "D" ? m2.trim().length : 0), 0);
-                              enriched.push({ val: pU >= pD ? "H" : "B", type: "marker" });
-                            }
-                          }
-                        }
-                        enriched.push({ val: e.closed_bullish ? "H" : "B", type: "marker" });
-
-                        return enriched.map((item, j) => (
-                          <span key={j} className="mr-0.5"
-                            style={{
-                              color: item.type === "marker"
-                                ? (item.val === "H" ? "#8888ff" : "#ff88ff")
-                                : item.type === "U" ? "#22c55e" : "#ef4444",
-                              fontWeight: item.type === "marker" ? "bold" : "normal",
-                            }}>
-                            {item.val}
-                          </span>
-                        ));
-                      })()}
+                      {e.moves.split(",").map((m, j) => (
+                        <span
+                          key={j}
+                          className="mr-1"
+                          style={{ color: m.trim()[0] === "U" ? "#22c55e" : m.trim()[0] === "D" ? "#ef4444" : "#f97316" }}
+                        >
+                          {m.trim()}
+                        </span>
+                      ))}
                     </td>
                   </tr>
                 ))}
