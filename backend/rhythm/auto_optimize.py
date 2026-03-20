@@ -68,6 +68,109 @@ def _export_from_db(symbol: str, timeframe: str) -> str:
     return tmp_path
 
 
+def _optimize_scipy(bougies, pct, indicateurs_actifs):
+    """Optimisation rapide avec scipy au lieu du brute force."""
+    import numpy as np
+    from scipy.optimize import minimize as scipy_minimize
+
+    n = len(indicateurs_actifs)
+
+    # Pre-calculer les indicateurs pour toutes les bougies
+    from rhythm.optimizer import extraire_partiels, calculer_indicateurs, MIN_TICKS_BOUGIE, SEUIL_HAUTE_CONFIANCE
+
+    cache = []
+    for b in bougies:
+        tt = b['total_u'] + b['total_d']
+        if tt < MIN_TICKS_BOUGIE:
+            continue
+        p = extraire_partiels(b['groupes'], tt, pct)
+        if not p:
+            continue
+        ind = calculer_indicateurs(p)
+        cache.append((ind, b['cloture']))
+
+    if len(cache) < 50:
+        return None
+
+    # Fonction objectif : maximiser la precision haute confiance
+    def objective(weights):
+        # Normaliser les poids pour qu'ils somment a 1
+        w = np.abs(weights)
+        total_w = np.sum(w)
+        if total_w == 0:
+            return 1.0  # Pire score
+        w = w / total_w
+
+        poids_dict = dict(zip(indicateurs_actifs, w))
+        correct = 0
+        total = 0
+        hc_ok = 0
+        hc_total = 0
+
+        for ind, cloture in cache:
+            score = sum(poids_dict[k] * ind.get(k, 0.5) for k in indicateurs_actifs)
+            prediction = 'HAUSSE' if score > 0.5 else 'BAISSE'
+            confiance = abs(score - 0.5) * 2
+            total += 1
+            if prediction == cloture:
+                correct += 1
+            if confiance > SEUIL_HAUTE_CONFIANCE:
+                hc_total += 1
+                if prediction == cloture:
+                    hc_ok += 1
+
+        if hc_total == 0:
+            return 1.0
+        hc_precision = hc_ok / hc_total
+        precision = correct / total if total > 0 else 0
+        # Objectif : maximiser HC precision (negatif car minimize)
+        return -(hc_precision * 0.7 + precision * 0.3)
+
+    # Lancer l'optimisation avec plusieurs points de depart
+    best_result = None
+    best_score = float('inf')
+
+    for _ in range(10):  # 10 points de depart aleatoires
+        x0 = np.random.dirichlet(np.ones(n))  # Poids aleatoires qui somment a 1
+        result = scipy_minimize(objective, x0, method='Nelder-Mead',
+                                options={'maxiter': 500, 'xatol': 0.01})
+        if result.fun < best_score:
+            best_score = result.fun
+            best_result = result
+
+    if best_result is None:
+        return None
+
+    # Normaliser les poids finaux
+    w = np.abs(best_result.x)
+    w = w / np.sum(w)
+    w = np.round(w, 2)
+
+    # Filtrer les poids trop petits (< 0.05)
+    poids_final = {}
+    for k, v in zip(indicateurs_actifs, w):
+        if v >= 0.05:
+            poids_final[k] = float(v)
+
+    # Renormaliser
+    total_p = sum(poids_final.values())
+    if total_p > 0:
+        poids_final = {k: round(v / total_p, 2) for k, v in poids_final.items()}
+
+    # Evaluer le resultat final
+    r = evaluer_poids(bougies, pct, poids_final)
+    if r is None:
+        return None
+
+    return {
+        'precision': r['precision'],
+        'hc_precision': r['hc_precision'],
+        'hc_pct': r['hc_pct'],
+        'poids': poids_final,
+        'total': r['total'],
+    }
+
+
 def optimize_formula(symbol: str, timeframe: str = "M15") -> dict:
     """Lance l'optimisation et retourne les resultats.
 
@@ -116,18 +219,31 @@ def optimize_formula(symbol: str, timeframe: str = "M15") -> dict:
 
     logger.info(f"  Indicateurs retenus : {indicateurs_utiles}")
 
-    # Etape 4 : Phase 2 - Brute force des poids
+    # Etape 4 : Optimisation rapide avec scipy (au lieu de brute force)
+    try:
+        from scipy.optimize import minimize as scipy_minimize
+        import numpy as np
+        use_scipy = True
+    except ImportError:
+        use_scipy = False
+        logger.warning("scipy non disponible, utilisation du brute force (lent)")
+
     meilleur_global = None
 
     for pct in NIVEAUX_AVANCEMENT:
-        meilleur, nb_combos = rechercher_meilleurs_poids(bougies, pct, indicateurs_utiles)
+        if use_scipy:
+            # Optimisation rapide avec scipy
+            meilleur = _optimize_scipy(bougies, pct, indicateurs_utiles)
+        else:
+            meilleur, nb_combos = rechercher_meilleurs_poids(bougies, pct, indicateurs_utiles)
 
-        if (meilleur_global is None or
-            meilleur['hc_precision'] > meilleur_global['hc_precision'] or
-            (meilleur['hc_precision'] == meilleur_global['hc_precision'] and
-             meilleur['precision'] > meilleur_global['precision'])):
-            meilleur_global = dict(meilleur)
-            meilleur_global['pct'] = pct
+        if meilleur and meilleur.get('poids'):
+            if (meilleur_global is None or
+                meilleur['hc_precision'] > meilleur_global['hc_precision'] or
+                (meilleur['hc_precision'] == meilleur_global['hc_precision'] and
+                 meilleur['precision'] > meilleur_global['precision'])):
+                meilleur_global = dict(meilleur)
+                meilleur_global['pct'] = pct
 
     if not meilleur_global or not meilleur_global.get('poids'):
         return {"success": False, "error": "Aucune combinaison trouvee"}
