@@ -191,7 +191,7 @@ export default function SignalIndicator({
         <span className="text-[#888] text-[14px]">Seuil:</span>
         <input
           type="range"
-          min={55}
+          min={51}
           max={80}
           step={1}
           value={threshold}

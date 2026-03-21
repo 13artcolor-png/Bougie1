@@ -20,6 +20,8 @@ interface TransitionPanelProps {
   onOpenQuarters?: () => void;
   onOpenOptimizer?: () => void;
   symbol?: string;
+  signalThreshold?: number;
+  onSignalThresholdChange?: (t: number) => void;
 }
 
 function moveColor(m: string): string {
@@ -28,19 +30,15 @@ function moveColor(m: string): string {
   return "#f97316";
 }
 
-export default function TransitionPanel({ microPrediction, closePrediction, closeStats, progress, onOpenFormula, onOpenHistory, onOpenQuarters, onOpenOptimizer, symbol, quarterPreds }: TransitionPanelProps) {
+export default function TransitionPanel({ microPrediction, closePrediction, closeStats, progress, onOpenFormula, onOpenHistory, onOpenQuarters, onOpenOptimizer, symbol, quarterPreds, signalThreshold: extThreshold, onSignalThresholdChange }: TransitionPanelProps) {
   const mp = microPrediction;
   const cp = closePrediction;
   const cs = closeStats;
   const pctProgress = Math.round(progress * 100);
-  const [signalThreshold, setSignalThreshold] = useState(() => {
-    const saved = localStorage.getItem("bougie1_signal_threshold");
-    return saved ? parseInt(saved) : 65;
-  });
+  const signalThreshold = extThreshold ?? 51;
 
   const handleThresholdChange = (t: number) => {
-    setSignalThreshold(t);
-    localStorage.setItem("bougie1_signal_threshold", String(t));
+    if (onSignalThresholdChange) onSignalThresholdChange(t);
   };
 
   if (!mp?.current_moves && !cp?.prediction) {

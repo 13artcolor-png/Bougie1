@@ -35,14 +35,17 @@ export default function App() {
   // Signaux de trading (prix + direction)
   const [signalLines, setSignalLines] = useState<Array<{ price: number; direction: string; time: string }>>([]);
   const lastSignalRef = useRef<string | null>(null);
-  const signalThresholdRef = useRef(65);
+  const [signalThreshold, setSignalThreshold] = useState(() => {
+    const saved = localStorage.getItem("bougie1_signal_threshold");
+    return saved ? parseInt(saved) : 51;
+  });
 
   // Detecter les signaux et ajouter les lignes
   useEffect(() => {
     if (!data?.close_prediction?.prediction || !data?.current_candle) return;
     const cp = data.close_prediction as any;
     const confidence = Math.max(cp.pct_hausse || 50, cp.pct_baisse || 50);
-    const threshold = signalThresholdRef.current;
+    const threshold = signalThreshold;
 
     if (confidence >= threshold) {
       const direction = cp.prediction === "HAUSSE" ? "LONG" : "SHORT";
@@ -297,6 +300,11 @@ export default function App() {
         onOpenOptimizer={() => setShowOptimizer(true)}
         symbol={symbol}
         quarterPreds={quarterPreds.filter(q => q !== null) as Array<{ quarter: number; prediction: string; pct: number }>}
+        signalThreshold={signalThreshold}
+        onSignalThresholdChange={(t) => {
+          setSignalThreshold(t);
+          localStorage.setItem("bougie1_signal_threshold", String(t));
+        }}
       />
 
       <FormulaEditor
