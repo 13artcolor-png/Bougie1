@@ -312,11 +312,27 @@ async def candle_websocket(websocket: WebSocket):
                         cp_dir = "LONG" if close_prediction["prediction"] == "HAUSSE" else "SHORT"
                         cp_conf = max(close_prediction.get("pct_hausse", 50), close_prediction.get("pct_baisse", 50))
 
-                        # Premier signal de la bougie -> ouvrir le trade
-                        if active_trade is None and cp_conf > 50:
+                        # Regles d'entree :
+                        # 1. Pas de trade en Q1 (pas assez de confirmation)
+                        # 2. LONG uniquement quand le prix touche le bas de la cage
+                        # 3. SHORT uniquement quand le prix touche le haut de la cage
+                        current_quarter = min(4, int(candle_progress * 4) + 1)
+                        candle_range = current_candle["high"] - current_candle["low"]
+                        price_now = current_candle["close"]
+
+                        # Zone basse = 10% du range depuis le low
+                        # Zone haute = 10% du range depuis le high
+                        near_low = candle_range > 0 and (price_now - current_candle["low"]) < candle_range * 0.15
+                        near_high = candle_range > 0 and (current_candle["high"] - price_now) < candle_range * 0.15
+
+                        can_open_long = current_quarter >= 2 and cp_dir == "LONG" and near_low
+                        can_open_short = current_quarter >= 2 and cp_dir == "SHORT" and near_high
+
+                        # Ouvrir le trade si conditions remplies
+                        if active_trade is None and cp_conf > 50 and (can_open_long or can_open_short):
                             active_trade = {
                                 "direction": cp_dir,
-                                "entry_price": current_candle["close"],
+                                "entry_price": price_now,
                                 "confidence": cp_conf,
                                 "candle_time": candle_start,
                             }
