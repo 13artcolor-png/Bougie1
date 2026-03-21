@@ -1,6 +1,7 @@
 """Routes REST de l'API"""
 
 import os
+import sys
 from fastapi import APIRouter
 from mt5 import connection, market_data
 from rhythm.storage import get_last_signatures, get_transition_probs
@@ -258,6 +259,36 @@ async def receive_alert(symbol: str, body: dict = Body(...)):
     result["progress"] = round(progress * 100, 1)
 
     return result
+
+
+@router.get("/slot-stats/{symbol}/{timeframe}")
+async def slot_stats(symbol: str, timeframe: str):
+    """Stats par creneau horaire"""
+    import asyncio
+    sys_path = os.path.join(os.path.dirname(__file__), "..", "..", "skills", "slot_stats")
+    if sys_path not in sys.path:
+        sys.path.insert(0, sys_path)
+    try:
+        from slot_bridge import analyze_slots
+        result = await asyncio.to_thread(analyze_slots, symbol, timeframe)
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.get("/slot-signal/{symbol}/{timeframe}")
+async def slot_signal(symbol: str, timeframe: str):
+    """Signal du creneau actuel"""
+    import asyncio
+    sys_path = os.path.join(os.path.dirname(__file__), "..", "..", "skills", "slot_stats")
+    if sys_path not in sys.path:
+        sys.path.insert(0, sys_path)
+    try:
+        from slot_bridge import get_current_signal
+        result = await asyncio.to_thread(get_current_signal, symbol, timeframe)
+        return result
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @router.post("/optimize/{symbol}/{timeframe}")
