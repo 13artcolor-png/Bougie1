@@ -13,7 +13,7 @@
 #   moves: list[str] - mouvements de grille (ex: ["DDD", "UU", "DDDDD"])
 #   progress: float - progression (0.0 a 1.0)
 #   candle_open, candle_high, candle_low, candle_close: float
-#   prev_close: float - close bougie precedente
+#   prev_close, prev_high, prev_low: float - bougie precedente
 #
 # Doit retourner : {"pct_hausse": float, "pct_baisse": float}
 
@@ -53,8 +53,19 @@ else:
     else:
         entropie = total_up / total
 
-    # Score composite (poids optimises par brute force)
-    score = 0.8 * entropie + 0.1 * ratio + 0.1 * ratio_moy
+    # Indicateur : Recherche de meche (biais bougie precedente)
+    prev_range = prev_high - prev_low
+    if prev_range > 0 and progress < 0.5:
+        prev_pos = (prev_close - prev_low) / prev_range
+        wick_bias = 1.0 - prev_pos
+        wick_weight = 0.15 * (1.0 - progress * 2)
+    else:
+        wick_bias = 0.5
+        wick_weight = 0.0
+
+    # Score composite (poids optimises + biais meche)
+    base_score = 0.8 * entropie + 0.1 * ratio + 0.1 * ratio_moy
+    score = base_score * (1.0 - wick_weight) + wick_bias * wick_weight
 
     # Conversion en pourcentage avec amplitude selon progression
     amplitude = 30 + progress * 20

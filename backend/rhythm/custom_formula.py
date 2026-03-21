@@ -107,7 +107,8 @@ def save_formula(code: str, symbol: str = "") -> bool:
 def execute_formula(moves: list, progress: float,
                      candle_open: float, candle_high: float,
                      candle_low: float, candle_close: float,
-                     prev_close: float, symbol: str = "") -> dict:
+                     prev_close: float, symbol: str = "",
+                     prev_high: float = 0, prev_low: float = 0) -> dict:
     """Execute la formule personnalisee et retourne le resultat."""
     code = get_formula(symbol)
 
@@ -120,6 +121,8 @@ def execute_formula(moves: list, progress: float,
         "candle_low": candle_low,
         "candle_close": candle_close,
         "prev_close": prev_close,
+        "prev_high": prev_high,
+        "prev_low": prev_low,
         "result": {"pct_hausse": 50.0, "pct_baisse": 50.0},
     }
 
