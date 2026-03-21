@@ -8,6 +8,7 @@ import HistoryPanel from "./components/rhythm/HistoryPanel";
 import QuartersPanel from "./components/rhythm/QuartersPanel";
 import OptimizerPanel from "./components/rhythm/OptimizerPanel";
 import PositionsPanel from "./components/rhythm/PositionsPanel";
+import SlotStatsPanel from "./components/rhythm/SlotStatsPanel";
 import { useWebSocket } from "./hooks/useWebSocket";
 import type { Candle } from "./types/candle";
 
@@ -132,6 +133,7 @@ export default function App() {
   const [showQuarters, setShowQuarters] = useState(false);
   const [showOptimizer, setShowOptimizer] = useState(false);
   const [showPositions, setShowPositions] = useState(false);
+  const [showSlotStats, setShowSlotStats] = useState(false);
 
   // Zoom vertical (1 = normal, < 1 = zoom in, > 1 = zoom out)
   const [zoomY, setZoomY] = useState(1);
@@ -301,6 +303,7 @@ export default function App() {
         onOpenQuarters={() => setShowQuarters(true)}
         onOpenOptimizer={() => setShowOptimizer(true)}
         onOpenPositions={() => setShowPositions(true)}
+        onOpenSlotStats={() => setShowSlotStats(true)}
         symbol={symbol}
         externalAlert={(data as any)?.external_alert || null}
         entryTiming={(data as any)?.entry_timing || null}
@@ -337,6 +340,12 @@ export default function App() {
       <PositionsPanel
         visible={showPositions}
         onClose={() => setShowPositions(false)}
+        symbol={symbol}
+      />
+
+      <SlotStatsPanel
+        visible={showSlotStats}
+        onClose={() => setShowSlotStats(false)}
         symbol={symbol}
       />
 
