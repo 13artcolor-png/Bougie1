@@ -49,8 +49,9 @@ async def candle_websocket(websocket: WebSocket):
     current_candle_time_for_quarters = 0
     quarter_prices = {}  # Prix a chaque quart pour verification next_q
     candles_since_optimize = 0  # Compteur pour auto-optimisation
-    # Trade tracking
-    active_trade = None
+    # Trade tracking - 2 strategies en parallele
+    active_trade_s1 = None  # Strategie 1 : bord de cage
+    active_trade_s2 = None  # Strategie 2 : signal externe + pullback central
     cached_trade_stats = None
     # Alerte externe (direction demandee par l'agent)
     external_alert = None  # {"direction": "LONG/SHORT"}
@@ -157,19 +158,21 @@ async def candle_websocket(websocket: WebSocket):
                     cached_close_stats = await asyncio.to_thread(
                         get_close_stats, symbol, timeframe, 50
                     )
-                    # Cloturer le trade actif a la fin de la bougie
-                    if active_trade:
-                        avg_range = last_closed["high"] - last_closed["low"]
-                        await asyncio.to_thread(
-                            save_trade, symbol, timeframe, active_trade["candle_time"],
-                            active_trade["direction"], active_trade["entry_price"],
-                            last_closed["close"], active_trade["confidence"],
-                            1.0, "close", avg_range
-                        )
-                        active_trade = None
-                        cached_trade_stats = await asyncio.to_thread(
-                            get_trade_stats, symbol, timeframe, 50
-                        )
+                    # Cloturer les trades actifs a la fin de la bougie
+                    avg_range = last_closed["high"] - last_closed["low"]
+                    for trade, label in [(active_trade_s1, "S1"), (active_trade_s2, "S2")]:
+                        if trade:
+                            await asyncio.to_thread(
+                                save_trade, symbol, timeframe, trade["candle_time"],
+                                trade["direction"], trade["entry_price"],
+                                last_closed["close"], trade["confidence"],
+                                1.0, f"{label}_close", avg_range
+                            )
+                    active_trade_s1 = None
+                    active_trade_s2 = None
+                    cached_trade_stats = await asyncio.to_thread(
+                        get_trade_stats, symbol, timeframe, 50
+                    )
 
                     last_close_prediction = None
                     quarters_saved = set()
@@ -307,49 +310,69 @@ async def candle_websocket(websocket: WebSocket):
                     else:
                         close_prediction = {"prediction": None, "source": "aucun"}
 
-                    # --- Trade tracking ---
+                    # --- Trade tracking (2 strategies en parallele) ---
                     if close_prediction.get("prediction"):
                         cp_dir = "LONG" if close_prediction["prediction"] == "HAUSSE" else "SHORT"
                         cp_conf = max(close_prediction.get("pct_hausse", 50), close_prediction.get("pct_baisse", 50))
 
-                        # Regles d'entree :
-                        # 1. Pas de trade en Q1 (pas assez de confirmation)
-                        # 2. LONG uniquement quand le prix touche le bas de la cage
-                        # 3. SHORT uniquement quand le prix touche le haut de la cage
                         current_quarter = min(4, int(candle_progress * 4) + 1)
                         candle_range = current_candle["high"] - current_candle["low"]
                         price_now = current_candle["close"]
+                        mid_price = (current_candle["high"] + current_candle["low"]) / 2
 
-                        # Zone basse = 10% du range depuis le low
-                        # Zone haute = 10% du range depuis le high
                         near_low = candle_range > 0 and (price_now - current_candle["low"]) < candle_range * 0.15
                         near_high = candle_range > 0 and (current_candle["high"] - price_now) < candle_range * 0.15
+                        near_mid = candle_range > 0 and abs(price_now - mid_price) < candle_range * 0.10
 
-                        can_open_long = current_quarter >= 2 and cp_dir == "LONG" and near_low
-                        can_open_short = current_quarter >= 2 and cp_dir == "SHORT" and near_high
+                        # === STRATEGIE 1 : Bord de cage ===
+                        can_s1_long = current_quarter >= 2 and cp_dir == "LONG" and near_low
+                        can_s1_short = current_quarter >= 2 and cp_dir == "SHORT" and near_high
 
-                        # Ouvrir le trade si conditions remplies
-                        if active_trade is None and cp_conf > 50 and (can_open_long or can_open_short):
-                            active_trade = {
+                        if active_trade_s1 is None and cp_conf > 50 and (can_s1_long or can_s1_short):
+                            active_trade_s1 = {
                                 "direction": cp_dir,
                                 "entry_price": price_now,
                                 "confidence": cp_conf,
                                 "candle_time": candle_start,
+                                "strategy": "S1_bord",
                             }
 
-                        # Retournement -> cloture a 0.5 lot, pas de reouverture
-                        elif active_trade and cp_dir != active_trade["direction"] and cp_conf > 50:
-                            avg_range = current_candle["high"] - current_candle["low"]
+                        elif active_trade_s1 and cp_dir != active_trade_s1["direction"] and cp_conf > 50:
+                            avg_range = candle_range
                             await asyncio.to_thread(
-                                save_trade, symbol, timeframe, active_trade["candle_time"],
-                                active_trade["direction"], active_trade["entry_price"],
-                                current_candle["close"], active_trade["confidence"],
-                                0.5, "retournement", avg_range
+                                save_trade, symbol, timeframe, active_trade_s1["candle_time"],
+                                active_trade_s1["direction"], active_trade_s1["entry_price"],
+                                price_now, active_trade_s1["confidence"],
+                                0.5, "S1_retournement", avg_range
                             )
-                            active_trade = None  # Pas de reouverture, attendre la prochaine bougie
-                            cached_trade_stats = await asyncio.to_thread(
-                                get_trade_stats, symbol, timeframe, 50
+                            active_trade_s1 = None
+
+                        # === STRATEGIE 2 : Signal externe + confirmation B1 + pullback central ===
+                        if external_alert and active_trade_s2 is None and current_quarter >= 2:
+                            alert_dir = external_alert["direction"]
+                            # Condition : B1 confirme la meme direction ET prix pres de la ligne centrale
+                            if cp_dir == alert_dir and near_mid and cp_conf > 50:
+                                active_trade_s2 = {
+                                    "direction": alert_dir,
+                                    "entry_price": price_now,
+                                    "confidence": cp_conf,
+                                    "candle_time": candle_start,
+                                    "strategy": "S2_pullback",
+                                }
+
+                        elif active_trade_s2 and cp_dir != active_trade_s2["direction"] and cp_conf > 50:
+                            avg_range = candle_range
+                            await asyncio.to_thread(
+                                save_trade, symbol, timeframe, active_trade_s2["candle_time"],
+                                active_trade_s2["direction"], active_trade_s2["entry_price"],
+                                price_now, active_trade_s2["confidence"],
+                                0.5, "S2_retournement", avg_range
                             )
+                            active_trade_s2 = None
+
+                        cached_trade_stats = await asyncio.to_thread(
+                            get_trade_stats, symbol, timeframe, 50
+                        )
                     # Garder la derniere prediction pour la verifier a la cloture
                     if close_prediction and close_prediction.get("prediction"):
                         last_close_prediction = close_prediction
@@ -403,7 +426,8 @@ async def candle_websocket(websocket: WebSocket):
                 "close_prediction": close_prediction,
                 "candle_progress": round(candle_progress, 3),
                 "trade_stats": cached_trade_stats,
-                "active_trade": active_trade,
+                "active_trade_s1": active_trade_s1,
+                "active_trade_s2": active_trade_s2,
                 "external_alert": external_alert,
                 "entry_timing": (
                     analyze_entry(
