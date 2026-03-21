@@ -167,6 +167,41 @@ export default function SlotStatsPanel({ visible, onClose, symbol }: SlotStatsPr
           </div>
         )}
 
+        {/* Calendrier des trades a venir (24h) */}
+        {slots.length > 0 && (
+          <div className="px-4 py-2 border-b border-[#2a2a3e]">
+            <div className="text-[#888] text-[14px] mb-2">Trades a venir (24h) :</div>
+            <div className="flex gap-[2px] items-end">
+              {Array.from({ length: 24 }, (_, h) => {
+                const slot = slots.find(s => s.hour === h);
+                const isNow = signal?.broker_hour === h;
+                const height = slot ? Math.max(8, Math.abs(slot.green_pct - 50) * 2) : 4;
+                const color = !slot ? "#333"
+                  : slot.green_pct > biasLong ? "#22c55e"
+                  : slot.green_pct < biasShort ? "#ef4444"
+                  : "#555";
+
+                return (
+                  <div key={h} className="flex flex-col items-center" style={{ width: "calc(100% / 24)" }}>
+                    <div className="w-full rounded-t" style={{
+                      height: `${height}px`,
+                      backgroundColor: color,
+                      border: isNow ? "2px solid #8888ff" : "none",
+                      opacity: slot ? 1 : 0.3,
+                    }} />
+                    <span className="text-[9px] text-[#555] mt-[2px]">{h}</span>
+                    {slot && slot.bias !== "NEUTRE" && (
+                      <span className="text-[8px] font-bold" style={{ color }}>
+                        {slot.bias === "LONG" ? "\u2191" : "\u2193"}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Resume */}
         <div className="flex items-center gap-4 px-4 py-2 border-b border-[#2a2a3e]">
           <span className="text-[#22c55e] font-bold">{longSlots.length} creneaux LONG</span>
