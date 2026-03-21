@@ -262,29 +262,34 @@ async def receive_alert(symbol: str, body: dict = Body(...)):
 
 
 @router.get("/slot-stats/{symbol}/{timeframe}")
-async def slot_stats(symbol: str, timeframe: str, lookback: int = 2000):
-    """Stats par creneau horaire - calcul direct"""
+async def slot_stats(symbol: str, timeframe: str, lookback: int = 5000):
+    """Stats par bougie M15 (96 slots sur 24h) - calcul direct"""
     import asyncio
     from mt5 import market_data
 
     def _calc():
-        tf_map = {"M15": "M15", "M30": "M30", "H1": "H1"}
-        candles = market_data.get_candles(symbol, tf_map.get(timeframe, "M15"), lookback)
+        tf_seconds = {"M15": 900, "M30": 1800, "H1": 3600}
+        dur = tf_seconds.get(timeframe, 900)
+        slots_per_day = 86400 // dur  # 96 pour M15
+
+        candles = market_data.get_candles(symbol, timeframe, lookback)
         if not candles or len(candles) < 100:
             return {"error": "Pas assez de donnees", "slots": []}
 
+        # Chaque slot = une position dans la journee (0 a 95 pour M15)
         slots_data = {}
         for i in range(1, len(candles)):
             c = candles[i]
             prev = candles[i - 1]
-            hour = (c["time"] // 3600) % 24
+            # Position dans la journee : (timestamp % 86400) / duree_bougie
+            slot_idx = (c["time"] % 86400) // dur
             is_green = c["close"] > c["open"]
             prev_green = prev["close"] > prev["open"]
 
-            if hour not in slots_data:
-                slots_data[hour] = {"total": 0, "green": 0, "after_green": 0,
-                                     "cont_gg": 0, "after_red": 0, "cont_rg": 0}
-            s = slots_data[hour]
+            if slot_idx not in slots_data:
+                slots_data[slot_idx] = {"total": 0, "green": 0, "after_green": 0,
+                                         "cont_gg": 0, "after_red": 0, "cont_rg": 0}
+            s = slots_data[slot_idx]
             s["total"] += 1
             if is_green:
                 s["green"] += 1
@@ -298,29 +303,37 @@ async def slot_stats(symbol: str, timeframe: str, lookback: int = 2000):
                     s["cont_rg"] += 1
 
         result_slots = []
-        for hour in range(24):
-            s = slots_data.get(hour)
-            if not s or s["total"] < 10:
+        for idx in range(slots_per_day):
+            s = slots_data.get(idx)
+            if not s or s["total"] < 5:
                 continue
             green_pct = round(s["green"] / s["total"] * 100, 1)
             cont_pct = round(s["cont_gg"] / s["after_green"] * 100, 1) if s["after_green"] > 0 else 0
             rev_pct = round(s["cont_rg"] / s["after_red"] * 100, 1) if s["after_red"] > 0 else 0
 
+            # Heure et minute
+            total_seconds = idx * dur
+            h = total_seconds // 3600
+            m = (total_seconds % 3600) // 60
+
             result_slots.append({
-                "hour": hour, "time_str": f"{hour:02d}:00",
+                "slot_idx": idx,
+                "time_str": f"{h:02d}:{m:02d}",
+                "hour": h, "minute": m,
                 "green_pct": green_pct, "cont_pct": cont_pct,
                 "rev_pct": rev_pct, "samples": s["total"],
                 "bias": "LONG" if green_pct > 58 else "SHORT" if green_pct < 42 else "NEUTRE",
+                "broker_timestamp": idx * dur,  # Secondes depuis minuit broker
             })
 
-        # Heure broker actuelle
-        broker_hour = -1
+        # Slot actuel
+        current_slot_idx = -1
         if candles:
-            last_time = candles[-1]["time"]
-            broker_hour = (last_time // 3600) % 24
+            current_slot_idx = (candles[-1]["time"] % 86400) // dur
 
         return {"symbol": symbol, "timeframe": timeframe, "slots": result_slots,
-                "broker_hour": broker_hour}
+                "current_slot_idx": current_slot_idx, "slots_per_day": slots_per_day,
+                "slot_duration": dur}
 
     return await asyncio.to_thread(_calc)
 
