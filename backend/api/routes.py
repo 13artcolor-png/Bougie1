@@ -65,17 +65,18 @@ async def direction(symbol: str, timeframe: str, lookback: int = 0):
 
 
 @router.get("/formula")
-async def get_formula_code():
-    """Retourne le code de la formule actuelle"""
-    return {"code": get_formula()}
+async def get_formula_code(symbol: str = ""):
+    """Retourne le code de la formule pour un actif"""
+    return {"code": get_formula(symbol), "symbol": symbol}
 
 
 @router.post("/formula")
 async def save_formula_code(body: dict = Body(...)):
-    """Sauvegarde le code de la formule"""
+    """Sauvegarde le code de la formule pour un actif"""
     code = body.get("code", "")
-    ok = save_formula(code)
-    return {"success": ok}
+    sym = body.get("symbol", "")
+    ok = save_formula(code, sym)
+    return {"success": ok, "symbol": sym}
 
 
 @router.post("/close-stats/reset")

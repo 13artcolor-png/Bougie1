@@ -259,14 +259,14 @@ async def candle_websocket(websocket: WebSocket):
                     if micro_prediction.get("prediction"):
                         micro_prediction["current_moves"] = grid_moves
 
-                    # --- Prediction par formule ---
+                    # --- Prediction par formule (specifique a l'actif) ---
                     prev_c = last_closed["close"] if last_closed else current_candle["open"]
                     close_prediction = await asyncio.to_thread(
                         execute_formula,
                         grid_moves, candle_progress,
                         current_candle["open"], current_candle["high"],
                         current_candle["low"], current_candle["close"],
-                        prev_c
+                        prev_c, symbol
                     )
                     if close_prediction:
                         close_prediction["source"] = "formule"

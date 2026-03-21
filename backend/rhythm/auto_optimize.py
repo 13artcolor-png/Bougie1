@@ -283,7 +283,7 @@ def optimize_formula(symbol: str, timeframe: str = "M15") -> dict:
     # Etape 7 : Appliquer si meilleure (pas d'overfitting)
     applied = False
     if validation.get("status") != "OVERFITTING":
-        save_formula(formule)
+        save_formula(formule, symbol)
         applied = True
         logger.info("  Formule appliquee !")
     else:

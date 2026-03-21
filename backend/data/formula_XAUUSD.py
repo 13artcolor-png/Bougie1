@@ -1,9 +1,13 @@
-# Formule de prediction de cloture
-# Generee le 21/03/2026 11:05
-# Basee sur 6742 bougies
-# Precision globale : 74.0%
-# Haute confiance : 91.1% (sur 24.9% des cas)
+# Formule de prediction de cloture - XAUUSD
+# Generee le 20/03/2026 20:01
+# Basee sur 6857 bougies
+# Precision globale : 74.6%
+# Haute confiance : 94.6% (sur 15.0% des cas)
+# Validation K-Fold (5 plis) : 74.6% +/- 0.5%
+# K-Fold HC : 94.6% +/- 1.4%
 # Meilleur a 50% d'avancement
+# Exposant optimise : 1.2
+# Seuil HC : 0.3
 #
 # Variables disponibles :
 #   moves: list[str] - mouvements de grille (ex: ["DDD", "UU", "DDDDD"])
@@ -20,22 +24,10 @@ total = total_up + total_down
 if total < 3:
     result = {"pct_hausse": 50.0, "pct_baisse": 50.0}
 else:
-    # Indicateur : Ratio simple U/total (poids 0.5)
+    # Ratio simple U/total (poids 0.1)
     ratio = total_up / total
 
-    # Indicateur : Run maximum U vs D (poids 0.1)
-    max_u = max((len(m) for m in moves if m[0] == "U"), default=0)
-    max_d = max((len(m) for m in moves if m[0] == "D"), default=0)
-    tm = max_u + max_d
-    ratio_max = max_u / tm if tm > 0 else 0.5
-
-    # Indicateur : Top 3 runs de chaque cote (poids 0.07)
-    runs_u = sorted([len(m) for m in moves if m[0] == "U"], reverse=True)[:3]
-    runs_d = sorted([len(m) for m in moves if m[0] == "D"], reverse=True)[:3]
-    st = sum(runs_u) + sum(runs_d)
-    ratio_top3 = sum(runs_u) / st if st > 0 else 0.5
-
-    # Indicateur : Run moyen U vs D (poids 0.32)
+    # Run moyen U vs D (poids 0.1)
     lens_u = [len(m) for m in moves if m[0] == "U"]
     lens_d = [len(m) for m in moves if m[0] == "D"]
     if lens_u and lens_d:
@@ -45,11 +37,24 @@ else:
     else:
         ratio_moy = total_up / total
 
+    # Entropie directionnelle (regularite) (poids 0.8)
+    import math
+    tous_lens = [len(m) for m in moves]
+    if len(tous_lens) >= 3:
+        moy_g = sum(tous_lens) / len(tous_lens)
+        if moy_g > 0:
+            var_g = sum((r - moy_g) ** 2 for r in tous_lens) / len(tous_lens)
+            cv = math.sqrt(var_g) / moy_g
+            reg = max(0, 1 - cv)
+            entropie = 0.5 + (total_up / total - 0.5) * (1 + reg * 0.5)
+            entropie = max(0.05, min(0.95, entropie))
+        else:
+            entropie = 0.5
+    else:
+        entropie = total_up / total
+
     # Score composite (poids optimises par brute force)
-    score = (0.5 * ratio
-             + 0.32 * ratio_moy
-             + 0.1 * ratio_max
-             + 0.07 * ratio_top3)
+    score = 0.8 * entropie + 0.1 * ratio + 0.1 * ratio_moy
 
     # Conversion en pourcentage avec amplitude selon progression
     amplitude = 30 + progress * 20

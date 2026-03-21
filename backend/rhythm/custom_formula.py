@@ -19,7 +19,17 @@ from utils.logger import get_logger
 
 logger = get_logger("rhythm.custom_formula")
 
-FORMULA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "custom_formula.py")
+FORMULA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+FORMULA_PATH = os.path.join(FORMULA_DIR, "custom_formula.py")
+
+
+def _get_formula_path(symbol: str = "") -> str:
+    """Retourne le chemin de la formule pour un actif donne."""
+    if symbol:
+        path = os.path.join(FORMULA_DIR, f"formula_{symbol}.py")
+        if os.path.exists(path):
+            return path
+    return FORMULA_PATH
 
 # Formule par defaut (fallback si data/custom_formula.py n'existe pas)
 # La vraie formule est dans data/custom_formula.py (modifiable via l'editeur)
@@ -64,21 +74,30 @@ else:
 '''
 
 
-def get_formula() -> str:
-    """Retourne le code de la formule actuelle."""
+def get_formula(symbol: str = "") -> str:
+    """Retourne le code de la formule pour un actif donne."""
+    path = _get_formula_path(symbol)
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    # Fallback : formule generique
     if os.path.exists(FORMULA_PATH):
         with open(FORMULA_PATH, "r", encoding="utf-8") as f:
             return f.read()
     return DEFAULT_FORMULA
 
 
-def save_formula(code: str) -> bool:
-    """Sauvegarde le code de la formule."""
+def save_formula(code: str, symbol: str = "") -> bool:
+    """Sauvegarde le code de la formule pour un actif donne."""
     try:
-        os.makedirs(os.path.dirname(FORMULA_PATH), exist_ok=True)
-        with open(FORMULA_PATH, "w", encoding="utf-8") as f:
+        os.makedirs(FORMULA_DIR, exist_ok=True)
+        if symbol:
+            path = os.path.join(FORMULA_DIR, f"formula_{symbol}.py")
+        else:
+            path = FORMULA_PATH
+        with open(path, "w", encoding="utf-8") as f:
             f.write(code)
-        logger.info("Formule sauvegardee")
+        logger.info(f"Formule sauvegardee pour {symbol or 'generique'}")
         return True
     except Exception as e:
         logger.error(f"Erreur sauvegarde formule: {e}")
@@ -88,9 +107,9 @@ def save_formula(code: str) -> bool:
 def execute_formula(moves: list, progress: float,
                      candle_open: float, candle_high: float,
                      candle_low: float, candle_close: float,
-                     prev_close: float) -> dict:
+                     prev_close: float, symbol: str = "") -> dict:
     """Execute la formule personnalisee et retourne le resultat."""
-    code = get_formula()
+    code = get_formula(symbol)
 
     # Variables accessibles dans la formule
     local_vars = {
