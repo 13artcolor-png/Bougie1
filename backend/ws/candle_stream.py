@@ -325,8 +325,17 @@ async def candle_websocket(websocket: WebSocket):
                         near_mid = candle_range > 0 and abs(price_now - mid_price) < candle_range * 0.10
 
                         # === STRATEGIE 1 : Bord de cage ===
-                        can_s1_long = current_quarter >= 2 and cp_dir == "LONG" and near_low
-                        can_s1_short = current_quarter >= 2 and cp_dir == "SHORT" and near_high
+                        # Si alerte externe active, S1 ne doit pas contredire
+                        s1_allowed = True
+                        if external_alert:
+                            if external_alert["direction"] != cp_dir:
+                                s1_allowed = False
+
+                        # Minimum Q2 strict : progress >= 0.25
+                        in_q2_or_later = candle_progress >= 0.25
+
+                        can_s1_long = in_q2_or_later and cp_dir == "LONG" and near_low and s1_allowed
+                        can_s1_short = in_q2_or_later and cp_dir == "SHORT" and near_high and s1_allowed
 
                         if active_trade_s1 is None and cp_conf > 50 and (can_s1_long or can_s1_short):
                             active_trade_s1 = {
@@ -348,7 +357,7 @@ async def candle_websocket(websocket: WebSocket):
                             active_trade_s1 = None
 
                         # === STRATEGIE 2 : Signal externe + confirmation B1 + pullback central ===
-                        if external_alert and active_trade_s2 is None and current_quarter >= 2:
+                        if external_alert and active_trade_s2 is None and in_q2_or_later:
                             alert_dir = external_alert["direction"]
                             # Condition : B1 confirme la meme direction ET prix pres de la ligne centrale
                             if cp_dir == alert_dir and near_mid and cp_conf > 50:

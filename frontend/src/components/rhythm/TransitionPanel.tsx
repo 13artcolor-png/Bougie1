@@ -28,6 +28,8 @@ interface TransitionPanelProps {
   entryTiming?: any;
   onSendAlert?: (direction: string) => void;
   onOpenSlotStats?: () => void;
+  activeTradeS1?: any;
+  activeTradeS2?: any;
 }
 
 function moveColor(m: string): string {
@@ -36,7 +38,7 @@ function moveColor(m: string): string {
   return "#f97316";
 }
 
-export default function TransitionPanel({ microPrediction, closePrediction, closeStats, progress, onOpenFormula, onOpenHistory, onOpenQuarters, onOpenOptimizer, symbol, quarterPreds, signalThreshold: extThreshold, onSignalThresholdChange, onOpenPositions, externalAlert, entryTiming, onSendAlert, onOpenSlotStats }: TransitionPanelProps) {
+export default function TransitionPanel({ microPrediction, closePrediction, closeStats, progress, onOpenFormula, onOpenHistory, onOpenQuarters, onOpenOptimizer, symbol, quarterPreds, signalThreshold: extThreshold, onSignalThresholdChange, onOpenPositions, externalAlert, entryTiming, onSendAlert, onOpenSlotStats, activeTradeS1, activeTradeS2 }: TransitionPanelProps) {
   const mp = microPrediction;
   const cp = closePrediction;
   const cs = closeStats;
@@ -77,6 +79,8 @@ export default function TransitionPanel({ microPrediction, closePrediction, clos
           threshold={signalThreshold}
           onThresholdChange={handleThresholdChange}
           quarterPreds={quarterPreds?.filter(q => q !== null) as QuarterPredItem[] | undefined}
+          activeTradeS1={activeTradeS1}
+          activeTradeS2={activeTradeS2}
         />
 
         <div className="w-[1px] h-[30px] bg-[#2a2a3e]" />

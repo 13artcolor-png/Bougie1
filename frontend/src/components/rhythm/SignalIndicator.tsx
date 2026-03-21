@@ -14,10 +14,13 @@ interface SignalIndicatorProps {
   threshold: number;
   onThresholdChange: (t: number) => void;
   quarterPreds?: QuarterPred[];
+  activeTradeS1?: any;
+  activeTradeS2?: any;
 }
 
 export default function SignalIndicator({
   prediction, pctHausse, pctBaisse, progress, threshold, onThresholdChange, quarterPreds,
+  activeTradeS1, activeTradeS2,
 }: SignalIndicatorProps) {
   const [lastSignal, setLastSignal] = useState<string | null>(null);
   const [signalTime, setSignalTime] = useState("");
@@ -178,6 +181,30 @@ export default function SignalIndicator({
         <div className="px-3 py-1 rounded font-bold text-[16px]"
           style={{ backgroundColor: ti.bg, color: ti.color, border: `1px solid ${ti.color}40` }}>
           {ti.label}
+        </div>
+      )}
+
+      {/* Trades actifs S1/S2 */}
+      {(activeTradeS1 || activeTradeS2) && (
+        <div className="flex gap-2">
+          {activeTradeS1 && (
+            <span className="text-[12px] px-2 py-0.5 rounded font-bold"
+              style={{
+                color: activeTradeS1.direction === "LONG" ? "#22c55e" : "#ef4444",
+                backgroundColor: "rgba(136,136,255,0.15)", border: "1px solid #8888ff",
+              }}>
+              S1 {activeTradeS1.direction} @ {activeTradeS1.entry_price?.toFixed(2)}
+            </span>
+          )}
+          {activeTradeS2 && (
+            <span className="text-[12px] px-2 py-0.5 rounded font-bold"
+              style={{
+                color: activeTradeS2.direction === "LONG" ? "#22c55e" : "#ef4444",
+                backgroundColor: "rgba(249,115,22,0.15)", border: "1px solid #f97316",
+              }}>
+              S2 {activeTradeS2.direction} @ {activeTradeS2.entry_price?.toFixed(2)}
+            </span>
+          )}
         </div>
       )}
 

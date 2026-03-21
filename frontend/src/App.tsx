@@ -309,6 +309,8 @@ export default function App() {
         externalAlert={(data as any)?.external_alert || null}
         entryTiming={(data as any)?.entry_timing || null}
         onSendAlert={(dir) => wsSend({ alert: dir })}
+        activeTradeS1={(data as any)?.active_trade_s1 || null}
+        activeTradeS2={(data as any)?.active_trade_s2 || null}
         quarterPreds={quarterPreds.filter(q => q !== null) as Array<{ quarter: number; prediction: string; pct: number }>}
         signalThreshold={signalThreshold}
         onSignalThresholdChange={(t) => {
