@@ -21,6 +21,7 @@ interface RadiographyPanelProps {
   onMicroTfChange: (tf: string) => void;
   priceBounds: { minPrice: number; maxPrice: number };
   quarterPredictions?: Array<{ quarter: number; prediction: string; pct: number; nextQ?: string; nextQpct?: number } | null>;
+  signalLines?: Array<{ price: number; direction: string; time: string }>;
 }
 
 /** Ecran 1 : Radiographie de bougie (Canvas)
@@ -34,6 +35,7 @@ export default function RadiographyPanel({
   onMicroTfChange,
   priceBounds,
   quarterPredictions,
+  signalLines,
 }: RadiographyPanelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -450,6 +452,29 @@ export default function RadiographyPanel({
       ctx.font = "bold 14px monospace";
       ctx.textAlign = "left";
       ctx.fillText(last.price.toFixed(2), last.x + 10, last.y + 4);
+    }
+
+    // --- Lignes de signal (LONG=vert, SHORT=rouge) ---
+    if (signalLines && signalLines.length > 0) {
+      for (const sig of signalLines) {
+        const y = priceToY(sig.price);
+        const color = sig.direction === "LONG" ? "#22c55e" : "#ef4444";
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 4]);
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Label
+        ctx.fillStyle = color;
+        ctx.font = "bold 12px sans-serif";
+        ctx.textAlign = "right";
+        ctx.fillText(`${sig.direction} ${sig.time}`, w - 5, y - 5);
+      }
     }
   }
 

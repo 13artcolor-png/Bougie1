@@ -11,6 +11,7 @@ interface VisualAnalysisPanelProps {
   transitionProbs: TransitionProb[];
   onZoomY?: (factor: number) => void;
   liveEstimate?: LiveEstimate[];
+  signalLines?: Array<{ price: number; direction: string; time: string }>;
 }
 
 interface HLine {
@@ -30,6 +31,7 @@ export default function VisualAnalysisPanel({
   transitionProbs,
   onZoomY,
   liveEstimate,
+  signalLines,
 }: VisualAnalysisPanelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -303,7 +305,31 @@ export default function VisualAnalysisPanel({
     drawHLines(ctx, w, h);
     // Prix actuel
     drawCurrentPrice(ctx, w, h);
-  }, [currentCandle, lastClosedCandle, history, tick, hLines, liveEstimate, drawCandle, drawScale, drawHLines, drawCurrentPrice]);
+
+    // Lignes de signal (LONG=vert, SHORT=rouge)
+    if (signalLines && signalLines.length > 0) {
+      for (const sig of signalLines) {
+        const y = priceToY(sig.price, h);
+        const color = sig.direction === "LONG" ? "#22c55e" : "#ef4444";
+        const scaleW = 90;
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 4]);
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w - scaleW, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Label sur l'echelle
+        ctx.fillStyle = color;
+        ctx.font = "bold 12px sans-serif";
+        ctx.textAlign = "right";
+        ctx.fillText(`${sig.direction} ${sig.time}`, w - scaleW - 5, y - 5);
+      }
+    }
+  }, [currentCandle, lastClosedCandle, history, tick, hLines, liveEstimate, signalLines, drawCandle, drawScale, drawHLines, drawCurrentPrice]);
 
   // Redimensionnement
   useEffect(() => {

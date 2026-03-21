@@ -32,6 +32,39 @@ export default function App() {
 
   const { data, connected } = useWebSocket(symbol, timeframe, microTf);
 
+  // Signaux de trading (prix + direction)
+  const [signalLines, setSignalLines] = useState<Array<{ price: number; direction: string; time: string }>>([]);
+  const lastSignalRef = useRef<string | null>(null);
+  const signalThresholdRef = useRef(65);
+
+  // Detecter les signaux et ajouter les lignes
+  useEffect(() => {
+    if (!data?.close_prediction?.prediction || !data?.current_candle) return;
+    const cp = data.close_prediction as any;
+    const confidence = Math.max(cp.pct_hausse || 50, cp.pct_baisse || 50);
+    const threshold = signalThresholdRef.current;
+
+    if (confidence >= threshold) {
+      const direction = cp.prediction === "HAUSSE" ? "LONG" : "SHORT";
+      if (direction !== lastSignalRef.current) {
+        lastSignalRef.current = direction;
+        const price = data.current_candle.close;
+        const time = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+        setSignalLines(prev => [...prev.slice(-10), { price, direction, time }]); // Garder les 10 derniers
+      }
+    } else {
+      lastSignalRef.current = null;
+    }
+  }, [data?.close_prediction, data?.current_candle]);
+
+  // Reset les lignes a chaque nouvelle bougie
+  useEffect(() => {
+    if (data?.current_candle?.time && data.current_candle.time !== lastCandleTimeRef.current) {
+      setSignalLines([]);
+      lastSignalRef.current = null;
+    }
+  }, [data?.current_candle?.time]);
+
   // Predictions par quart pour la bougie en cours
   const [quarterPreds, setQuarterPreds] = useState<Array<{ quarter: number; prediction: string; pct: number; nextQ?: string; nextQpct?: number } | null>>([]);
   const lastCandleTimeRef = useRef(0);
@@ -219,6 +252,7 @@ export default function App() {
             onMicroTfChange={setMicroTf}
             priceBounds={priceBounds}
             quarterPredictions={quarterPreds}
+            signalLines={signalLines}
           />
         </div>
 
@@ -240,6 +274,7 @@ export default function App() {
             transitionProbs={data?.transition_probs?.all ?? []}
             onZoomY={handleZoomY}
             liveEstimate={data?.live_estimate ?? []}
+            signalLines={signalLines}
           />
         </div>
       </div>
