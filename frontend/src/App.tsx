@@ -55,7 +55,8 @@ export default function App() {
         lastSignalRef.current = direction;
         const price = data.current_candle.close;
         const time = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-        setSignalLines(prev => [...prev.slice(-10), { price, direction, time }]); // Garder les 10 derniers
+        // Une seule ligne par signal (remplacer, pas ajouter)
+        setSignalLines([{ price, direction, time }]);
       }
     } else {
       lastSignalRef.current = null;
