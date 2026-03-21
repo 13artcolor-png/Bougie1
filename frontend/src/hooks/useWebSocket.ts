@@ -74,5 +74,13 @@ export function useWebSocket(symbol: string, timeframe: string, microTf: string)
     }
   }, [symbol, timeframe, microTf]);
 
-  return { data, connected };
+  // Fonction pour envoyer un message au serveur
+  const send = (msg: Record<string, unknown>) => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(msg));
+    }
+  };
+
+  return { data, connected, send };
 }

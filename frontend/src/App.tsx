@@ -31,7 +31,7 @@ export default function App() {
   const [timeframe, setTimeframe] = usePersistedState("bougie1_timeframe", "M15");
   const [microTf, setMicroTf] = usePersistedState("bougie1_microTf", "M1");
 
-  const { data, connected } = useWebSocket(symbol, timeframe, microTf);
+  const { data, connected, send: wsSend } = useWebSocket(symbol, timeframe, microTf);
 
   // Signaux de trading (prix + direction)
   const [signalLines, setSignalLines] = useState<Array<{ price: number; direction: string; time: string }>>([]);
@@ -302,6 +302,9 @@ export default function App() {
         onOpenOptimizer={() => setShowOptimizer(true)}
         onOpenPositions={() => setShowPositions(true)}
         symbol={symbol}
+        externalAlert={(data as any)?.external_alert || null}
+        entryTiming={(data as any)?.entry_timing || null}
+        onSendAlert={(dir) => wsSend({ alert: dir })}
         quarterPreds={quarterPreds.filter(q => q !== null) as Array<{ quarter: number; prediction: string; pct: number }>}
         signalThreshold={signalThreshold}
         onSignalThresholdChange={(t) => {

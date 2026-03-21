@@ -19,6 +19,7 @@ from rhythm.auto_backfill import auto_backfill
 from rhythm.auto_optimize import optimize_formula
 from rhythm.pattern_memory import learn_from_candle, backfill_patterns
 from rhythm.trade_tracker import save_trade, get_trade_stats
+from rhythm.entry_timing import analyze_entry
 
 logger = get_logger("ws.candle_stream")
 
@@ -49,8 +50,11 @@ async def candle_websocket(websocket: WebSocket):
     quarter_prices = {}  # Prix a chaque quart pour verification next_q
     candles_since_optimize = 0  # Compteur pour auto-optimisation
     # Trade tracking
-    active_trade = None  # {"direction": "LONG/SHORT", "entry_price": float, "confidence": float, "candle_time": int}
+    active_trade = None
     cached_trade_stats = None
+    # Alerte externe (direction demandee par l'agent)
+    external_alert = None  # {"direction": "LONG/SHORT"}
+    entry_timing = None  # Resultat de l'analyse de timing
 
     try:
         while True:
@@ -74,6 +78,15 @@ async def candle_websocket(websocket: WebSocket):
                 if "micro_tf" in data:
                     micro_tf = data["micro_tf"]
                     logger.info(f"Micro TF change: {micro_tf}")
+                if "alert" in data:
+                    alert_dir = data["alert"].upper()
+                    if alert_dir in ("LONG", "SHORT"):
+                        external_alert = {"direction": alert_dir}
+                        logger.info(f"Alerte externe recue: {alert_dir}")
+                    elif alert_dir == "CLEAR":
+                        external_alert = None
+                        entry_timing = None
+                        logger.info("Alerte externe effacee")
             except asyncio.TimeoutError:
                 pass
 
@@ -375,6 +388,13 @@ async def candle_websocket(websocket: WebSocket):
                 "candle_progress": round(candle_progress, 3),
                 "trade_stats": cached_trade_stats,
                 "active_trade": active_trade,
+                "external_alert": external_alert,
+                "entry_timing": (
+                    analyze_entry(
+                        external_alert["direction"], current_candle, last_closed,
+                        grid_moves, candle_progress
+                    ) if external_alert and grid_moves else None
+                ),
             }
 
             # Donnees statiques : envoyees seulement quand elles changent

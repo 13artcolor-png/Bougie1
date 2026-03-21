@@ -9,6 +9,7 @@ from rhythm.direction import analyze_direction
 from rhythm.custom_formula import get_formula, save_formula
 from rhythm.auto_optimize import optimize_formula
 from rhythm.trade_tracker import get_trade_stats as get_trades
+from rhythm.entry_timing import analyze_entry
 from rhythm.close_tracker import get_close_stats
 from fastapi import Body
 
@@ -215,6 +216,48 @@ async def export_history(symbol: str, timeframe: str):
 async def trades(symbol: str, timeframe: str, limit: int = 100):
     """Historique des trades"""
     return get_trades(symbol, timeframe, limit)
+
+
+@router.post("/alert/{symbol}")
+async def receive_alert(symbol: str, body: dict = Body(...)):
+    """Recoit une alerte d'un agent externe et retourne le timing d'entree.
+
+    Body : {"direction": "LONG" ou "SHORT"}
+    """
+    direction = body.get("direction", "").upper()
+    if direction not in ("LONG", "SHORT"):
+        return {"error": "Direction requise: LONG ou SHORT"}
+
+    # Recuperer les donnees actuelles
+    from mt5 import market_data
+    candles = market_data.get_candles(symbol, "M15", 3)
+    if not candles or len(candles) < 2:
+        return {"error": "Pas de donnees"}
+
+    current = candles[-1]
+    last_closed = candles[-2]
+
+    # Recuperer les micro-bougies et calculer les mouvements
+    from rhythm.grid_moves import compute_grid_moves
+    micro = market_data.get_micro_candles(symbol, "M15", "M1", current["time"])
+    grid_moves = []
+    if micro and len(micro) >= 2:
+        grid_moves = compute_grid_moves(micro, current["high"], current["low"])
+
+    # Calculer la progression
+    import time
+    tf_seconds = 900
+    last_micro_time = micro[-1]["time"] if micro else current["time"]
+    elapsed = max(0, last_micro_time - current["time"])
+    progress = min(elapsed / tf_seconds, 1.0)
+
+    # Analyser le timing
+    result = analyze_entry(direction, current, last_closed, grid_moves, progress)
+    result["symbol"] = symbol
+    result["direction_demandee"] = direction
+    result["progress"] = round(progress * 100, 1)
+
+    return result
 
 
 @router.post("/optimize/{symbol}/{timeframe}")

@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { MicroPrediction, ClosePrediction, CloseStats } from "../../types/candle";
 import Tip from "../common/Tip";
 import SignalIndicator from "./SignalIndicator";
+import EntryTiming from "./EntryTiming";
 
 interface QuarterPredItem {
   quarter: number;
@@ -23,6 +24,9 @@ interface TransitionPanelProps {
   signalThreshold?: number;
   onSignalThresholdChange?: (t: number) => void;
   onOpenPositions?: () => void;
+  externalAlert?: { direction: string } | null;
+  entryTiming?: any;
+  onSendAlert?: (direction: string) => void;
 }
 
 function moveColor(m: string): string {
@@ -31,7 +35,7 @@ function moveColor(m: string): string {
   return "#f97316";
 }
 
-export default function TransitionPanel({ microPrediction, closePrediction, closeStats, progress, onOpenFormula, onOpenHistory, onOpenQuarters, onOpenOptimizer, symbol, quarterPreds, signalThreshold: extThreshold, onSignalThresholdChange, onOpenPositions }: TransitionPanelProps) {
+export default function TransitionPanel({ microPrediction, closePrediction, closeStats, progress, onOpenFormula, onOpenHistory, onOpenQuarters, onOpenOptimizer, symbol, quarterPreds, signalThreshold: extThreshold, onSignalThresholdChange, onOpenPositions, externalAlert, entryTiming, onSendAlert }: TransitionPanelProps) {
   const mp = microPrediction;
   const cp = closePrediction;
   const cs = closeStats;
@@ -171,7 +175,16 @@ export default function TransitionPanel({ microPrediction, closePrediction, clos
         )}
       </div>
 
-      {/* LIGNE 2 : WR + Quarts + Historique visuel + Parcours */}
+      {/* LIGNE 2 : Timing d'entree (agent externe) */}
+      <div className="flex items-center gap-4 mb-2">
+        <EntryTiming
+          alert={externalAlert || null}
+          timing={entryTiming || null}
+          onSendAlert={onSendAlert || (() => {})}
+        />
+      </div>
+
+      {/* LIGNE 3 : WR + Quarts */}
       <div className="flex items-center gap-4">
         {/* WR global */}
         {cs && cs.total > 0 && (
