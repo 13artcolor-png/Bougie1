@@ -261,6 +261,7 @@ export default function App() {
         onOpenQuarters={() => setShowQuarters(true)}
         onOpenOptimizer={() => setShowOptimizer(true)}
         symbol={symbol}
+        quarterPreds={quarterPreds.filter(q => q !== null) as Array<{ quarter: number; prediction: string; pct: number }>}
       />
 
       <FormulaEditor

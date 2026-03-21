@@ -3,10 +3,17 @@ import type { MicroPrediction, ClosePrediction, CloseStats } from "../../types/c
 import Tip from "../common/Tip";
 import SignalIndicator from "./SignalIndicator";
 
+interface QuarterPredItem {
+  quarter: number;
+  prediction: string;
+  pct: number;
+}
+
 interface TransitionPanelProps {
   microPrediction?: MicroPrediction | null;
   closePrediction?: ClosePrediction | null;
   closeStats?: CloseStats | null;
+  quarterPreds?: QuarterPredItem[];
   progress: number;
   onOpenFormula?: () => void;
   onOpenHistory?: () => void;
@@ -21,7 +28,7 @@ function moveColor(m: string): string {
   return "#f97316";
 }
 
-export default function TransitionPanel({ microPrediction, closePrediction, closeStats, progress, onOpenFormula, onOpenHistory, onOpenQuarters, onOpenOptimizer, symbol }: TransitionPanelProps) {
+export default function TransitionPanel({ microPrediction, closePrediction, closeStats, progress, onOpenFormula, onOpenHistory, onOpenQuarters, onOpenOptimizer, symbol, quarterPreds }: TransitionPanelProps) {
   const mp = microPrediction;
   const cp = closePrediction;
   const cs = closeStats;
@@ -65,6 +72,7 @@ export default function TransitionPanel({ microPrediction, closePrediction, clos
           progress={progress}
           threshold={signalThreshold}
           onThresholdChange={handleThresholdChange}
+          quarterPreds={quarterPreds?.filter(q => q !== null) as QuarterPredItem[] | undefined}
         />
 
         <div className="w-[1px] h-[30px] bg-[#2a2a3e]" />
