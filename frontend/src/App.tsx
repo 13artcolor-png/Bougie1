@@ -7,6 +7,7 @@ import FormulaEditor from "./components/rhythm/FormulaEditor";
 import HistoryPanel from "./components/rhythm/HistoryPanel";
 import QuartersPanel from "./components/rhythm/QuartersPanel";
 import OptimizerPanel from "./components/rhythm/OptimizerPanel";
+import PositionsPanel from "./components/rhythm/PositionsPanel";
 import { useWebSocket } from "./hooks/useWebSocket";
 import type { Candle } from "./types/candle";
 
@@ -130,6 +131,7 @@ export default function App() {
   const [showHistory, setShowHistory] = useState(false);
   const [showQuarters, setShowQuarters] = useState(false);
   const [showOptimizer, setShowOptimizer] = useState(false);
+  const [showPositions, setShowPositions] = useState(false);
 
   // Zoom vertical (1 = normal, < 1 = zoom in, > 1 = zoom out)
   const [zoomY, setZoomY] = useState(1);
@@ -298,6 +300,7 @@ export default function App() {
         onOpenHistory={() => setShowHistory(true)}
         onOpenQuarters={() => setShowQuarters(true)}
         onOpenOptimizer={() => setShowOptimizer(true)}
+        onOpenPositions={() => setShowPositions(true)}
         symbol={symbol}
         quarterPreds={quarterPreds.filter(q => q !== null) as Array<{ quarter: number; prediction: string; pct: number }>}
         signalThreshold={signalThreshold}
@@ -325,6 +328,12 @@ export default function App() {
       <OptimizerPanel
         visible={showOptimizer}
         onClose={() => setShowOptimizer(false)}
+        symbol={symbol}
+      />
+
+      <PositionsPanel
+        visible={showPositions}
+        onClose={() => setShowPositions(false)}
         symbol={symbol}
       />
 

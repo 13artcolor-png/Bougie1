@@ -8,6 +8,7 @@ from rhythm.stats import get_global_stats
 from rhythm.direction import analyze_direction
 from rhythm.custom_formula import get_formula, save_formula
 from rhythm.auto_optimize import optimize_formula
+from rhythm.trade_tracker import get_trade_stats as get_trades
 from rhythm.close_tracker import get_close_stats
 from fastapi import Body
 
@@ -208,6 +209,12 @@ async def export_history(symbol: str, timeframe: str):
         lines.append(f"{date_str} | {cloture} | {r['moves']}")
 
     return {"content": "\n".join(lines), "filename": f"{symbol}_{timeframe}_export.txt", "count": len(rows)}
+
+
+@router.get("/trades/{symbol}/{timeframe}")
+async def trades(symbol: str, timeframe: str, limit: int = 100):
+    """Historique des trades"""
+    return get_trades(symbol, timeframe, limit)
 
 
 @router.post("/optimize/{symbol}/{timeframe}")

@@ -18,6 +18,7 @@ from rhythm.next_quarter_formula import predict_next_quarter
 from rhythm.auto_backfill import auto_backfill
 from rhythm.auto_optimize import optimize_formula
 from rhythm.pattern_memory import learn_from_candle, backfill_patterns
+from rhythm.trade_tracker import save_trade, get_trade_stats
 
 logger = get_logger("ws.candle_stream")
 
@@ -47,6 +48,9 @@ async def candle_websocket(websocket: WebSocket):
     current_candle_time_for_quarters = 0
     quarter_prices = {}  # Prix a chaque quart pour verification next_q
     candles_since_optimize = 0  # Compteur pour auto-optimisation
+    # Trade tracking
+    active_trade = None  # {"direction": "LONG/SHORT", "entry_price": float, "confidence": float, "candle_time": int}
+    cached_trade_stats = None
 
     try:
         while True:
@@ -140,6 +144,20 @@ async def candle_websocket(websocket: WebSocket):
                     cached_close_stats = await asyncio.to_thread(
                         get_close_stats, symbol, timeframe, 50
                     )
+                    # Cloturer le trade actif a la fin de la bougie
+                    if active_trade:
+                        avg_range = last_closed["high"] - last_closed["low"]
+                        await asyncio.to_thread(
+                            save_trade, symbol, timeframe, active_trade["candle_time"],
+                            active_trade["direction"], active_trade["entry_price"],
+                            last_closed["close"], active_trade["confidence"],
+                            1.0, "close", avg_range
+                        )
+                        active_trade = None
+                        cached_trade_stats = await asyncio.to_thread(
+                            get_trade_stats, symbol, timeframe, 50
+                        )
+
                     last_close_prediction = None
                     quarters_saved = set()
                     current_candle_time_for_quarters = 0
@@ -275,6 +293,40 @@ async def candle_websocket(websocket: WebSocket):
                         close_prediction["current_moves"] = grid_moves
                     else:
                         close_prediction = {"prediction": None, "source": "aucun"}
+
+                    # --- Trade tracking ---
+                    if close_prediction.get("prediction"):
+                        cp_dir = "LONG" if close_prediction["prediction"] == "HAUSSE" else "SHORT"
+                        cp_conf = max(close_prediction.get("pct_hausse", 50), close_prediction.get("pct_baisse", 50))
+
+                        # Premier signal de la bougie -> ouvrir le trade
+                        if active_trade is None and cp_conf > 50:
+                            active_trade = {
+                                "direction": cp_dir,
+                                "entry_price": current_candle["close"],
+                                "confidence": cp_conf,
+                                "candle_time": candle_start,
+                            }
+
+                        # Retournement -> cloture a 0.5 lot
+                        elif active_trade and cp_dir != active_trade["direction"] and cp_conf > 50:
+                            avg_range = current_candle["high"] - current_candle["low"]
+                            await asyncio.to_thread(
+                                save_trade, symbol, timeframe, active_trade["candle_time"],
+                                active_trade["direction"], active_trade["entry_price"],
+                                current_candle["close"], active_trade["confidence"],
+                                0.5, "retournement", avg_range
+                            )
+                            # Ouvrir un nouveau trade dans la nouvelle direction
+                            active_trade = {
+                                "direction": cp_dir,
+                                "entry_price": current_candle["close"],
+                                "confidence": cp_conf,
+                                "candle_time": candle_start,
+                            }
+                            cached_trade_stats = await asyncio.to_thread(
+                                get_trade_stats, symbol, timeframe, 50
+                            )
                     # Garder la derniere prediction pour la verifier a la cloture
                     if close_prediction and close_prediction.get("prediction"):
                         last_close_prediction = close_prediction
@@ -327,6 +379,8 @@ async def candle_websocket(websocket: WebSocket):
                 "micro_prediction": micro_prediction,
                 "close_prediction": close_prediction,
                 "candle_progress": round(candle_progress, 3),
+                "trade_stats": cached_trade_stats,
+                "active_trade": active_trade,
             }
 
             # Donnees statiques : envoyees seulement quand elles changent
