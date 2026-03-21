@@ -49,13 +49,56 @@ async def candle_websocket(websocket: WebSocket):
     current_candle_time_for_quarters = 0
     quarter_prices = {}  # Prix a chaque quart pour verification next_q
     candles_since_optimize = 0  # Compteur pour auto-optimisation
-    # Trade tracking - 2 strategies en parallele
-    active_trade_s1 = None  # Strategie 1 : bord de cage
-    active_trade_s2 = None  # Strategie 2 : signal externe + pullback central
+    # Trade tracking - 2 strategies en parallele (persistees en base)
     cached_trade_stats = None
-    # Alerte externe (direction demandee par l'agent)
-    external_alert = None  # {"direction": "LONG/SHORT"}
-    entry_timing = None  # Resultat de l'analyse de timing
+
+    # Charger l'alerte externe et les trades actifs depuis la base
+    def _load_alert(sym):
+        import sqlite3
+        conn = sqlite3.connect(os.path.join(os.path.dirname(__file__), "..", "data", "signatures.db"))
+        conn.row_factory = sqlite3.Row
+        r = conn.execute("SELECT * FROM external_alerts WHERE symbol=? AND active=1 ORDER BY id DESC LIMIT 1", (sym,)).fetchone()
+        conn.close()
+        return {"direction": r["direction"]} if r else None
+
+    def _save_alert(sym, direction):
+        import sqlite3
+        conn = sqlite3.connect(os.path.join(os.path.dirname(__file__), "..", "data", "signatures.db"))
+        conn.execute("UPDATE external_alerts SET active=0 WHERE symbol=?", (sym,))
+        if direction and direction != "CLEAR":
+            conn.execute("INSERT INTO external_alerts (symbol, direction, active) VALUES (?, ?, 1)", (sym, direction))
+        conn.commit()
+        conn.close()
+
+    def _load_active_trade(sym, tf, strategy):
+        import sqlite3
+        conn = sqlite3.connect(os.path.join(os.path.dirname(__file__), "..", "data", "signatures.db"))
+        conn.row_factory = sqlite3.Row
+        r = conn.execute("SELECT * FROM active_trades WHERE symbol=? AND timeframe=? AND strategy=? AND active=1 ORDER BY id DESC LIMIT 1", (sym, tf, strategy)).fetchone()
+        conn.close()
+        return dict(r) if r else None
+
+    def _save_active_trade(sym, tf, strategy, trade):
+        import sqlite3
+        conn = sqlite3.connect(os.path.join(os.path.dirname(__file__), "..", "data", "signatures.db"))
+        conn.execute("UPDATE active_trades SET active=0 WHERE symbol=? AND timeframe=? AND strategy=?", (sym, tf, strategy))
+        if trade:
+            conn.execute("INSERT INTO active_trades (symbol, timeframe, strategy, direction, entry_price, confidence, candle_time, active) VALUES (?,?,?,?,?,?,?,1)",
+                (sym, tf, strategy, trade["direction"], trade["entry_price"], trade["confidence"], trade["candle_time"]))
+        conn.commit()
+        conn.close()
+
+    def _clear_active_trade(sym, tf, strategy):
+        import sqlite3
+        conn = sqlite3.connect(os.path.join(os.path.dirname(__file__), "..", "data", "signatures.db"))
+        conn.execute("UPDATE active_trades SET active=0 WHERE symbol=? AND timeframe=? AND strategy=?", (sym, tf, strategy))
+        conn.commit()
+        conn.close()
+
+    import os
+    external_alert = _load_alert(symbol)
+    active_trade_s1 = _load_active_trade(symbol, timeframe, "S1")
+    active_trade_s2 = _load_active_trade(symbol, timeframe, "S2")
 
     try:
         while True:
@@ -83,10 +126,11 @@ async def candle_websocket(websocket: WebSocket):
                     alert_dir = data["alert"].upper()
                     if alert_dir in ("LONG", "SHORT"):
                         external_alert = {"direction": alert_dir}
+                        _save_alert(symbol, alert_dir)
                         logger.info(f"Alerte externe recue: {alert_dir}")
                     elif alert_dir == "CLEAR":
                         external_alert = None
-                        entry_timing = None
+                        _save_alert(symbol, None)
                         logger.info("Alerte externe effacee")
             except asyncio.TimeoutError:
                 pass
@@ -170,6 +214,8 @@ async def candle_websocket(websocket: WebSocket):
                             )
                     active_trade_s1 = None
                     active_trade_s2 = None
+                    _clear_active_trade(symbol, timeframe, "S1")
+                    _clear_active_trade(symbol, timeframe, "S2")
                     cached_trade_stats = await asyncio.to_thread(
                         get_trade_stats, symbol, timeframe, 50
                     )
@@ -345,6 +391,7 @@ async def candle_websocket(websocket: WebSocket):
                                 "candle_time": candle_start,
                                 "strategy": "S1_bord",
                             }
+                            _save_active_trade(symbol, timeframe, "S1", active_trade_s1)
 
                         elif active_trade_s1 and cp_dir != active_trade_s1["direction"] and cp_conf > 50:
                             avg_range = candle_range
@@ -355,6 +402,7 @@ async def candle_websocket(websocket: WebSocket):
                                 0.5, "S1_retournement", avg_range
                             )
                             active_trade_s1 = None
+                            _clear_active_trade(symbol, timeframe, "S1")
 
                         # === STRATEGIE 2 : Signal externe + confirmation B1 + pullback central ===
                         if external_alert and active_trade_s2 is None and in_q2_or_later:
@@ -368,6 +416,7 @@ async def candle_websocket(websocket: WebSocket):
                                     "candle_time": candle_start,
                                     "strategy": "S2_pullback",
                                 }
+                                _save_active_trade(symbol, timeframe, "S2", active_trade_s2)
 
                         elif active_trade_s2 and cp_dir != active_trade_s2["direction"] and cp_conf > 50:
                             avg_range = candle_range
@@ -378,6 +427,7 @@ async def candle_websocket(websocket: WebSocket):
                                 0.5, "S2_retournement", avg_range
                             )
                             active_trade_s2 = None
+                            _clear_active_trade(symbol, timeframe, "S2")
 
                         cached_trade_stats = await asyncio.to_thread(
                             get_trade_stats, symbol, timeframe, 50
