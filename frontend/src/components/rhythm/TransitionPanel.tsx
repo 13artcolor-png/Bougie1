@@ -1,5 +1,7 @@
+import { useState } from "react";
 import type { MicroPrediction, ClosePrediction, CloseStats } from "../../types/candle";
 import Tip from "../common/Tip";
+import SignalIndicator from "./SignalIndicator";
 
 interface TransitionPanelProps {
   microPrediction?: MicroPrediction | null;
@@ -24,6 +26,15 @@ export default function TransitionPanel({ microPrediction, closePrediction, clos
   const cp = closePrediction;
   const cs = closeStats;
   const pctProgress = Math.round(progress * 100);
+  const [signalThreshold, setSignalThreshold] = useState(() => {
+    const saved = localStorage.getItem("bougie1_signal_threshold");
+    return saved ? parseInt(saved) : 65;
+  });
+
+  const handleThresholdChange = (t: number) => {
+    setSignalThreshold(t);
+    localStorage.setItem("bougie1_signal_threshold", String(t));
+  };
 
   if (!mp?.current_moves && !cp?.prediction) {
     return (
@@ -44,8 +55,20 @@ export default function TransitionPanel({ microPrediction, closePrediction, clos
 
   return (
     <div className="bg-[#0e0e18] border-t border-[#2a2a3e] px-4 py-2">
-      {/* LIGNE 1 : Prediction + Parcours */}
+      {/* LIGNE 1 : Signal + Prediction */}
       <div className="flex items-center gap-4 mb-2">
+        {/* Signal d'entree/sortie */}
+        <SignalIndicator
+          prediction={cp?.prediction || null}
+          pctHausse={cp?.pct_hausse ?? 50}
+          pctBaisse={cp?.pct_baisse ?? 50}
+          progress={progress}
+          threshold={signalThreshold}
+          onThresholdChange={handleThresholdChange}
+        />
+
+        <div className="w-[1px] h-[30px] bg-[#2a2a3e]" />
+
         {/* Prediction de cloture */}
         {cp?.prediction && (
           <>
