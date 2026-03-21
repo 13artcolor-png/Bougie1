@@ -308,7 +308,7 @@ async def candle_websocket(websocket: WebSocket):
                                 "candle_time": candle_start,
                             }
 
-                        # Retournement -> cloture a 0.5 lot
+                        # Retournement -> cloture a 0.5 lot, pas de reouverture
                         elif active_trade and cp_dir != active_trade["direction"] and cp_conf > 50:
                             avg_range = current_candle["high"] - current_candle["low"]
                             await asyncio.to_thread(
@@ -317,13 +317,7 @@ async def candle_websocket(websocket: WebSocket):
                                 current_candle["close"], active_trade["confidence"],
                                 0.5, "retournement", avg_range
                             )
-                            # Ouvrir un nouveau trade dans la nouvelle direction
-                            active_trade = {
-                                "direction": cp_dir,
-                                "entry_price": current_candle["close"],
-                                "confidence": cp_conf,
-                                "candle_time": candle_start,
-                            }
+                            active_trade = None  # Pas de reouverture, attendre la prochaine bougie
                             cached_trade_stats = await asyncio.to_thread(
                                 get_trade_stats, symbol, timeframe, 50
                             )
